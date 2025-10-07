@@ -1,0 +1,97 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: episcopio-db
+    environment:
+      POSTGRES_DB: ${EP_POSTGRES_DATABASE:-episcopio}
+      POSTGRES_USER: ${EP_POSTGRES_USER:-episcopio}
+      POSTGRES_PASSWORD: ${EP_POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db/schema:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U episcopio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: episcopio-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    container_name: episcopio-api
+    environment:
+      EP_POSTGRES_USER: ${EP_POSTGRES_USER:-episcopio}
+      EP_POSTGRES_PASSWORD: ${EP_POSTGRES_PASSWORD:-changeme}
+      EP_POSTGRES_HOST: db
+      EP_POSTGRES_PORT: 5432
+      EP_POSTGRES_DATABASE: ${EP_POSTGRES_DATABASE:-episcopio}
+      EP_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: dashboard/Dockerfile
+    container_name: episcopio-dashboard
+    environment:
+      EP_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8050:8050"
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: orchestrator/Dockerfile
+    container_name: episcopio-scheduler
+    environment:
+      EP_POSTGRES_USER: ${EP_POSTGRES_USER:-episcopio}
+      EP_POSTGRES_PASSWORD: ${EP_POSTGRES_PASSWORD:-changeme}
+      EP_POSTGRES_HOST: db
+      EP_POSTGRES_PORT: 5432
+      EP_POSTGRES_DATABASE: ${EP_POSTGRES_DATABASE:-episcopio}
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+    name: episcopio-pgdata
+
+networks:
+  default:
+    name: episcopio-network

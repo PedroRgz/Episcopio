@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install API dependencies
+        run: |
+          pip install -r api/requirements.txt
+      
+      - name: Install Dashboard dependencies
+        run: |
+          pip install -r dashboard/requirements.txt
+      
+      - name: Install Orchestrator dependencies
+        run: |
+          pip install -r orchestrator/requirements.txt
+      
+      - name: Run Python linting (flake8)
+        run: |
+          pip install flake8
+          flake8 api/ dashboard/ analytics/ etl/ ingesta/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+      
+      - name: Validate configuration files
+        run: |
+          python -c "import yaml; yaml.safe_load(open('config/settings.yaml'))"
+          python -c "import yaml; yaml.safe_load(open('config/secrets.sample.yaml'))"
+          python -c "import yaml; yaml.safe_load(open('analytics/reglas/alertas.yaml'))"
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          push: false
+          tags: episcopio-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build Dashboard image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dashboard/Dockerfile
+          push: false
+          tags: episcopio-dashboard:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build Scheduler image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: orchestrator/Dockerfile
+          push: false
+          tags: episcopio-scheduler:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,18 @@
+# Episcopio Alert Rules Configuration
+# Rules for automated alert generation
+
+- id: a1
+  nombre: "Incremento súbito oficial"
+  descripcion: "Detecta incrementos súbitos en casos confirmados"
+  serie: "casos"
+  ventana_ref: 14  # días de referencia para promedio móvil
+  umbral_delta: 0.2  # 20% de incremento vs promedio
+  min_casos: 5  # mínimo de casos para activar alerta
+
+- id: a2
+  nombre: "Pico social + negativo"
+  descripcion: "Detecta picos en menciones con sentimiento negativo"
+  serie: "menciones"
+  zscore: 2.0  # umbral de z-score para pico
+  sentimiento_max: -0.2  # umbral de sentimiento negativo
+  ventana_dias: 3  # días de sentimiento negativo sostenido

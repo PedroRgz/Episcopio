@@ -1,0 +1,33 @@
+# Episcopio - Non-sensitive configuration
+app:
+  name: "Episcopio"
+  version: "1.0.0-mvp"
+  timezone: "America/Merida"
+  
+alerts:
+  alert_windows_days: 14
+  cooldown_hours: 24
+  min_cases_threshold: 5
+  delta_threshold: 0.2  # 20% increase
+  zscore_threshold: 2.0
+  sentiment_negative_threshold: -0.2
+
+analytics:
+  moving_window_days: [7, 14, 28]
+  correlation_window_days: 14
+  
+ingesta:
+  batch_size: 1000
+  retry_attempts: 3
+  timeout_seconds: 30
+
+api:
+  title: "Episcopio API"
+  description: "API de lectura para monitoreo epidemiológico"
+  version: "1.0"
+  rate_limit_per_minute: 60
+  
+dashboard:
+  refresh_interval_seconds: 300
+  default_entity: "31"  # Yucatán
+  max_results: 100

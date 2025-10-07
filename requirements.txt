@@ -1,0 +1,31 @@
+# Episcopio - Root requirements file
+# Install all dependencies for development
+
+# API
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.6
+
+# Dashboard
+dash==2.14.2
+plotly==5.18.0
+
+# Database
+psycopg2-binary==2.9.9
+redis==5.0.1
+
+# Data processing
+pandas==2.1.4
+numpy==1.26.2
+
+# Utilities
+PyYAML==6.0.1
+requests==2.31.0
+schedule==1.2.0
+
+# Development
+flake8==7.0.0
+pytest==7.4.3
