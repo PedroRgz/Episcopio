@@ -1,5 +1,5 @@
 """Configuration loader for Episcopio."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import BaseSettings
 import yaml
 import os
@@ -54,9 +54,10 @@ class Secrets(BaseSettings):
     security_jwt_secret: str = Field(default="changeme_jwt_secret")
     security_cors_allowed_origins: str = Field(default="http://localhost:8050,http://localhost:8000")
 
-    class Config:
-        env_prefix = "EP_"
-        env_file = ".env"
+    model_config = ConfigDict(
+        env_prefix="EP_",
+        env_file=".env"
+    )
 
 
 def flatten_yaml_keys(d: dict, prefix: str = "") -> dict:
