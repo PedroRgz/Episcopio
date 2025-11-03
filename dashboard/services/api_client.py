@@ -37,7 +37,7 @@ class EpiscopioAPIClient:
             r = requests.get(f"{self.base_url}/api/v1/health", timeout=TIMEOUT)
             r.raise_for_status()
             return r.json()
-        except (RequestException, ConnectionError, Timeout):
+        except RequestException:
             return {"status": "error", "mode": "api_unavailable"}
     
     def get_meta(self) -> Dict[str, Any]:
