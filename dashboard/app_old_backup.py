@@ -2,8 +2,6 @@
 import dash
 from dash import dcc, html, Input, Output, State
 import plotly.graph_objs as go
-import plotly.express as px
-from datetime import datetime, timedelta
 import pandas as pd
 
 from services.api_client import api_client
