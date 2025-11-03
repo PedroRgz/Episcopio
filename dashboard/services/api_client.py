@@ -1,5 +1,6 @@
 """API client for Episcopio dashboard."""
 import requests
+from requests.exceptions import RequestException, ConnectionError, Timeout
 import os
 from typing import Optional, Dict, Any
 from .sample_data_loader import sample_data_loader
@@ -36,7 +37,7 @@ class EpiscopioAPIClient:
             r = requests.get(f"{self.base_url}/api/v1/health", timeout=TIMEOUT)
             r.raise_for_status()
             return r.json()
-        except Exception:
+        except (RequestException, ConnectionError, Timeout):
             return {"status": "error", "mode": "api_unavailable"}
     
     def get_meta(self) -> Dict[str, Any]:

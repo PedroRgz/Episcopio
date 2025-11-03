@@ -1,7 +1,10 @@
 """Sample data loader for Episcopio dashboard."""
 import json
 import os
+import logging
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 
 class SampleDataLoader:
@@ -22,8 +25,8 @@ class SampleDataLoader:
         try:
             with open(self.data_path, 'r', encoding='utf-8') as f:
                 self._data = json.load(f)
-        except Exception as e:
-            print(f"Error loading sample data: {e}")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Error loading sample data: {e}")
             self._data = self._get_empty_data()
     
     def _get_empty_data(self) -> Dict[str, Any]:
