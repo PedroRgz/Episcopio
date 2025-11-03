@@ -34,8 +34,20 @@ python main.py &
 API_PID=$!
 cd ..
 
-# Wait for API to be ready
-sleep 5
+# Wait for API to be ready using health check with retries
+export EP_API_WAIT_SECONDS=${EP_API_WAIT_SECONDS:-5}
+echo "Waiting for API to be ready (timeout: ${EP_API_WAIT_SECONDS}s)..."
+API_HEALTH_URL="${EP_API_URL}/health"
+SECONDS_WAITED=0
+until curl --silent --fail "$API_HEALTH_URL" > /dev/null; do
+    sleep 1
+    SECONDS_WAITED=$((SECONDS_WAITED+1))
+    if [ "$SECONDS_WAITED" -ge "$EP_API_WAIT_SECONDS" ]; then
+        echo "API did not become ready after ${EP_API_WAIT_SECONDS} seconds. Exiting."
+        exit 1
+    fi
+done
+echo "API is ready!"
 
 # Start Dashboard
 echo "Starting Dashboard service on port 8050..."
