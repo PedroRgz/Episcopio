@@ -399,19 +399,14 @@ def save_api_keys(save_clicks, cancel_clicks, inegi, twitter, facebook, instagra
     
     if button_id == "save-api-keys":
         # Collect provided keys
-        keys = {}
-        if inegi:
-            keys["inegi"] = inegi
-        if twitter:
-            keys["twitter"] = twitter
-        if facebook:
-            keys["facebook"] = facebook
-        if instagram:
-            keys["instagram"] = instagram
-        if reddit:
-            keys["reddit"] = reddit
-        if newsapi:
-            keys["newsapi"] = newsapi
+        keys = {name: value for name, value in [
+            ("inegi", inegi),
+            ("twitter", twitter),
+            ("facebook", facebook),
+            ("instagram", instagram),
+            ("reddit", reddit),
+            ("newsapi", newsapi)
+        ] if value}
         
         # Update API client with keys
         api_client.set_api_keys(keys)
