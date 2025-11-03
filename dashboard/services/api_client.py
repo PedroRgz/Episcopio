@@ -14,12 +14,37 @@ class EpiscopioAPIClient:
     """Client for Episcopio API."""
     
     def __init__(self, base_url: str = BASE_URL, use_sample_data: bool = True):
+        """Initialize the API client.
+        
+        Args:
+            base_url: Base URL for the API endpoint
+            use_sample_data: If True (default), uses sample data instead of real API calls.
+                           This allows users to explore the application without configuring API keys.
+        
+        Note:
+            The client defaults to sample data mode for demonstration purposes.
+            Call set_api_keys() to switch to real API mode with actual platform credentials.
+        """
         self.base_url = base_url.rstrip("/")
         self.use_sample_data = use_sample_data
         self.api_keys = {}
     
     def set_api_keys(self, keys: Dict[str, str]):
-        """Set API keys for different platforms."""
+        """Set API keys for different platforms.
+        
+        Args:
+            keys: Dictionary mapping platform names to API keys
+                 (e.g., {'inegi': 'token', 'twitter': 'bearer_token'})
+        
+        Security Warning:
+            API keys are stored in plain text in memory without encryption.
+            For production use:
+            - Implement proper secret management (e.g., HashiCorp Vault, AWS Secrets Manager)
+            - Use environment variables or encrypted storage
+            - Never commit API keys to version control
+            - Consider using OAuth flows instead of storing credentials
+            - Implement session timeout and key rotation policies
+        """
         self.api_keys = keys
         # If any keys are provided, try to use real API
         if any(keys.values()):

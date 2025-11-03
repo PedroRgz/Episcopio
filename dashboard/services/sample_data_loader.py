@@ -42,7 +42,20 @@ class SampleDataLoader:
         }
     
     def get_kpis(self, entidad: str) -> Dict[str, Any]:
-        """Get KPIs for an entity."""
+        """Get KPIs for an entity.
+        
+        Args:
+            entidad: State/entity code (e.g., '31' for Yucatán)
+        
+        Returns:
+            Dictionary with KPI values. If data loading failed or entity not found,
+            returns a dictionary with all values set to 0.
+        
+        Note:
+            Returns fallback values (zeros) when:
+            - Sample data file was not found or couldn't be loaded
+            - The specified entity code is not present in sample data
+        """
         return self._data.get("kpis", {}).get(entidad, {
             "casos_totales": 0,
             "casos_activos": 0,
@@ -53,14 +66,27 @@ class SampleDataLoader:
         })
     
     def get_timeseries(self, entidad: str) -> Dict[str, Any]:
-        """Get time series data for an entity."""
+        """Get time series data for an entity.
+        
+        Args:
+            entidad: State/entity code (e.g., '31' for Yucatán)
+        
+        Returns:
+            Dictionary with time series data including 'serie_oficial' and 'serie_social'.
+            If data loading failed or entity not found, returns empty lists.
+        """
         return self._data.get("timeseries", {}).get(entidad, {
             "serie_oficial": [],
             "serie_social": {"menciones": []}
         })
     
     def get_alerts(self) -> Dict[str, Any]:
-        """Get alerts."""
+        """Get alerts.
+        
+        Returns:
+            Dictionary with 'alertas' key containing a list of active alerts.
+            Returns empty list if data loading failed.
+        """
         return {
             "alertas": self._data.get("alerts", [])
         }

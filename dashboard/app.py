@@ -32,14 +32,19 @@ app.layout = html.Div([
                 html.P(
                     "Ingrese sus API keys para acceder a datos en tiempo real de las diferentes plataformas. "
                     "Si prefiere explorar la aplicación con datos de muestra, haga clic en 'Cancelar'.",
-                    style={"color": "#7f8c8d", "marginBottom": "20px", "fontSize": "14px"}
+                    style={"color": "#7f8c8d", "marginBottom": "10px", "fontSize": "14px"}
                 ),
+                html.P([
+                    html.Strong("⚠️ Advertencia de Seguridad: "),
+                    "Las API keys se almacenan temporalmente en memoria durante esta sesión. "
+                    "Para uso en producción, implemente un sistema de gestión de secretos apropiado y encriptación de credenciales."
+                ], style={"color": "#e67e22", "marginBottom": "20px", "fontSize": "12px", "backgroundColor": "#fff3cd", "padding": "10px", "borderRadius": "4px", "border": "1px solid #ffc107"}),
                 
                 html.Div([
                     html.Label("INEGI Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
                     dcc.Input(
                         id="api-key-inegi",
-                        type="text",
+                        type="password",
                         placeholder="Ingrese su token de INEGI",
                         style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
                     )
@@ -49,7 +54,7 @@ app.layout = html.Div([
                     html.Label("Twitter Bearer Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
                     dcc.Input(
                         id="api-key-twitter",
-                        type="text",
+                        type="password",
                         placeholder="Ingrese su bearer token de Twitter",
                         style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
                     )
@@ -59,7 +64,7 @@ app.layout = html.Div([
                     html.Label("Facebook Access Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
                     dcc.Input(
                         id="api-key-facebook",
-                        type="text",
+                        type="password",
                         placeholder="Ingrese su access token de Facebook",
                         style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
                     )
@@ -69,7 +74,7 @@ app.layout = html.Div([
                     html.Label("Instagram Access Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
                     dcc.Input(
                         id="api-key-instagram",
-                        type="text",
+                        type="password",
                         placeholder="Ingrese su access token de Instagram",
                         style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
                     )
@@ -79,7 +84,7 @@ app.layout = html.Div([
                     html.Label("Reddit Client ID:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
                     dcc.Input(
                         id="api-key-reddit",
-                        type="text",
+                        type="password",
                         placeholder="Ingrese su client ID de Reddit",
                         style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
                     )
@@ -89,7 +94,7 @@ app.layout = html.Div([
                     html.Label("NewsAPI Key:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
                     dcc.Input(
                         id="api-key-newsapi",
-                        type="text",
+                        type="password",
                         placeholder="Ingrese su key de NewsAPI",
                         style={"width": "100%", "padding": "8px", "marginBottom": "20px", "borderRadius": "4px", "border": "1px solid #ddd"}
                     )
