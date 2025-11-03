@@ -56,8 +56,20 @@ python main.py &
 API_PID=$!
 cd ..
 
-# Wait for API to start
-sleep 3
+# Wait for API to start (poll readiness endpoint with timeout)
+echo "⏳ Waiting for API to become ready..."
+MAX_ATTEMPTS=30
+ATTEMPT=1
+until curl -sf "${EP_API_URL}/health" > /dev/null; do
+    if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+        echo "❌ API did not become ready after $((MAX_ATTEMPTS)) attempts."
+        cleanup
+        exit 1
+    fi
+    sleep 1
+    ATTEMPT=$((ATTEMPT+1))
+done
+echo "✅ API is ready!"
 
 # Start Dashboard in background
 cd dashboard
