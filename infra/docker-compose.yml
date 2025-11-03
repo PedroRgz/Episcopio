@@ -1,3 +1,7 @@
+# ⚠️ DEPRECATED: This Docker Compose configuration is kept for reference only.
+# For new deployments, please use Azure Web Apps or Azure VM deployment.
+# See AZURE_DEPLOYMENT.md for detailed instructions.
+
 version: "3.9"
 
 services:

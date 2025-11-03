@@ -168,30 +168,54 @@ episcopio/
 ### Caching
 - Redis 7
 
+### Data Science & Visualization
+- Matplotlib 3.8.2
+- Seaborn 0.13.1
+- Jupyter Notebook 7.0.6
+- NumPy 1.26.2
+
 ### Utilities
 - PyYAML 6.0.1
 - Requests 2.31.0
 - Schedule 1.2.0
 
-### DevOps
-- Docker
-- Docker Compose 3.9
-- GitHub Actions
+### Cloud & Deployment
+- Azure Web Apps
+- Azure PostgreSQL Flexible Server
+- Azure Redis Cache
+- GitHub Actions (CI/CD)
 
 ## 🚀 Cómo Usar
 
-### Setup Rápido (Recomendado)
+### Setup Rápido - Desarrollo Local
 
 ```bash
 # Clonar repositorio
 git clone https://github.com/PedroRgz/Episcopio.git
 cd Episcopio
 
-# Ejecutar script de setup
-./setup.sh
+# Ejecutar script de inicio
+./run_local.sh
+```
 
-# O con Make
-make setup
+### Jupyter Notebook - Explorar ETL
+
+```bash
+# Instalar dependencias (si es necesario)
+pip install jupyter
+
+# Abrir notebook
+jupyter notebook episcopio_etl_notebook.ipynb
+```
+
+### Despliegue en Azure
+
+```bash
+# Ver guía completa
+cat AZURE_DEPLOYMENT.md
+
+# O despliegue rápido
+az webapp up --name episcopio-app --runtime "PYTHON:3.11"
 ```
 
 ### Acceder a la Aplicación

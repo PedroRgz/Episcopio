@@ -32,11 +32,12 @@ episcopio/
 
 ### Prerrequisitos
 
-- Docker y Docker Compose
-- Python 3.11+ (para desarrollo local)
+- Python 3.11+
 - Git
+- PostgreSQL 16+ (local o Azure)
+- Redis (opcional, para caché)
 
-### Instalación
+### Instalación Local
 
 1. **Clonar el repositorio**
 
@@ -45,45 +46,30 @@ git clone https://github.com/PedroRgz/Episcopio.git
 cd Episcopio
 ```
 
-2. **Configurar variables de entorno**
+2. **Ejecutar script de inicio automático**
 
 ```bash
-cd infra
-cp .env.example .env
-# Edita .env con tus credenciales
+./run_local.sh
 ```
 
-3. **Configurar secretos (opcional)**
+Esto creará un entorno virtual, instalará dependencias y arrancará ambos servicios (API y Dashboard).
 
-```bash
-cd ../config
-cp secrets.sample.yaml secrets.local.yaml
-# Edita secrets.local.yaml con tus API keys
-```
-
-4. **Iniciar la aplicación**
-
-```bash
-cd ../infra
-docker-compose up -d --build
-```
-
-5. **Inicializar la base de datos**
-
-```bash
-# Ejecutar el schema SQL
-docker exec -i episcopio-db psql -U episcopio -d episcopio < ../db/schema/schema.sql
-
-# Cargar datos semilla
-docker exec -i episcopio-db psql -U episcopio -d episcopio < ../db/seeds/seed_entidades.sql
-docker exec -i episcopio-db psql -U episcopio -d episcopio < ../db/seeds/seed_morbilidades.sql
-```
-
-6. **Acceder a la aplicación**
+3. **Acceder a la aplicación**
 
 - **Dashboard**: http://localhost:8050
 - **API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
+
+### Despliegue en Azure
+
+Para desplegar en producción usando Azure Web Apps o una VM de Azure, consulta la [Guía de Despliegue en Azure](AZURE_DEPLOYMENT.md) que incluye:
+
+- Configuración de Azure Web Apps
+- Configuración de VM en Azure
+- Configuración de PostgreSQL y Redis
+- Variables de entorno
+- SSL/HTTPS
+- Monitoreo y backup
 
 ## 📊 Uso
 
@@ -115,33 +101,40 @@ Documentación interactiva disponible en http://localhost:8000/docs
 
 ## 🛠️ Desarrollo
 
-### Desarrollo Local
+### Desarrollo Local Simplificado
 
-1. **Crear entorno virtual**
-
-```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-```
-
-2. **Instalar dependencias**
+Para desarrollo local, simplemente ejecuta:
 
 ```bash
-pip install -r api/requirements.txt
-pip install -r dashboard/requirements.txt
-pip install -r orchestrator/requirements.txt
+./run_local.sh
 ```
 
-3. **Configurar variables de entorno**
+Este script automáticamente:
+- Crea y activa un entorno virtual
+- Instala todas las dependencias
+- Configura variables de entorno
+- Inicia API y Dashboard
+
+### Jupyter Notebook - Exploración de ETL
+
+Para explorar y ejecutar procesos ETL paso a paso:
 
 ```bash
-export EP_POSTGRES_HOST=localhost
-export EP_POSTGRES_USER=episcopio
-export EP_POSTGRES_PASSWORD=changeme
-export EP_POSTGRES_DATABASE=episcopio
+# Instalar Jupyter (si no está instalado)
+pip install jupyter
+
+# Ejecutar notebook
+jupyter notebook episcopio_etl_notebook.ipynb
 ```
 
-4. **Ejecutar servicios individualmente**
+El notebook incluye:
+- Ingesta de datos oficiales y sociales
+- Normalización y transformación
+- Cálculo de KPIs
+- Generación de alertas
+- Visualizaciones interactivas
+
+### Ejecutar servicios individualmente
 
 ```bash
 # API
@@ -165,7 +158,6 @@ flake8 api/ dashboard/ analytics/ etl/ ingesta/
 
 # Validar configuración
 python -c "import yaml; yaml.safe_load(open('config/settings.yaml'))"
-python -c "import yaml; yaml.safe_load(open('config/secrets.sample.yaml'))"
 ```
 
 ## 📁 Estructura de Datos
@@ -216,36 +208,33 @@ Las variables de entorno tienen prioridad sobre el archivo YAML.
 
 Editar `analytics/reglas/alertas.yaml` para configurar reglas personalizadas.
 
-## 🐳 Docker
+## ☁️ Despliegue en Producción
 
-### Construir imágenes
+### Azure Web Apps (Recomendado)
 
-```bash
-# Construir todas las imágenes
-docker-compose -f infra/docker-compose.yml build
-
-# Construir imagen específica
-docker-compose -f infra/docker-compose.yml build api
-```
-
-### Ver logs
+La forma más sencilla de desplegar Episcopio en producción es usando Azure Web Apps:
 
 ```bash
-# Todos los servicios
-docker-compose -f infra/docker-compose.yml logs -f
-
-# Servicio específico
-docker-compose -f infra/docker-compose.yml logs -f api
+# Crear recursos en Azure
+az webapp up --name episcopio-app --runtime "PYTHON:3.11"
 ```
 
-### Detener servicios
+### Azure VM
+
+Para mayor control, puedes desplegar en una máquina virtual:
 
 ```bash
-docker-compose -f infra/docker-compose.yml down
+# Crear VM
+az vm create --name episcopio-vm --image Ubuntu2204
 
-# Eliminar volúmenes también
-docker-compose -f infra/docker-compose.yml down -v
+# SSH y configurar
+ssh azureuser@<IP>
+git clone https://github.com/PedroRgz/Episcopio.git
+cd Episcopio
+./run_local.sh
 ```
+
+Ver [AZURE_DEPLOYMENT.md](AZURE_DEPLOYMENT.md) para instrucciones detalladas.
 
 ## 📖 Documentación
 

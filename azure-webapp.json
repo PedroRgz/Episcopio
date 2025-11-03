@@ -1,0 +1,26 @@
+{
+  "name": "episcopio-webapp",
+  "location": "eastus",
+  "sku": {
+    "name": "B1",
+    "tier": "Basic"
+  },
+  "kind": "linux",
+  "properties": {
+    "reserved": true,
+    "siteConfig": {
+      "linuxFxVersion": "PYTHON|3.11",
+      "appCommandLine": "bash startup.sh",
+      "appSettings": [
+        {
+          "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+          "value": "true"
+        },
+        {
+          "name": "WEBSITES_PORT",
+          "value": "8050"
+        }
+      ]
+    }
+  }
+}

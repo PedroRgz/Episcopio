@@ -21,6 +21,15 @@ redis==5.0.1
 pandas==2.1.4
 numpy==1.26.2
 
+# Visualization (for notebooks)
+matplotlib==3.8.2
+seaborn==0.13.1
+
+# Jupyter notebooks
+jupyter==1.0.0
+notebook==7.0.6
+ipykernel==6.28.0
+
 # Utilities
 PyYAML==6.0.1
 requests==2.31.0

@@ -1,3 +1,4 @@
+# ⚠️ DEPRECATED: Use Azure deployment instead. See AZURE_DEPLOYMENT.md
 FROM python:3.11-slim
 
 WORKDIR /app
