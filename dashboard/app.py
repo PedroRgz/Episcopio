@@ -17,17 +17,184 @@ app = dash.Dash(
 
 # App layout
 app.layout = html.Div([
+    # Store for API keys
+    dcc.Store(id='api-keys-store', data={}),
+    dcc.Store(id='use-sample-data-store', data=True),
+    
+    # Modal for API keys
+    html.Div([
+        html.Div([
+            html.Div([
+                html.H2("Configuración de API Keys", style={
+                    "color": "#2c3e50",
+                    "marginBottom": "10px"
+                }),
+                html.P(
+                    "Ingrese sus API keys para acceder a datos en tiempo real de las diferentes plataformas. "
+                    "Si prefiere explorar la aplicación con datos de muestra, haga clic en 'Cancelar'.",
+                    style={"color": "#7f8c8d", "marginBottom": "20px", "fontSize": "14px"}
+                ),
+                
+                html.Div([
+                    html.Label("INEGI Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
+                    dcc.Input(
+                        id="api-key-inegi",
+                        type="text",
+                        placeholder="Ingrese su token de INEGI",
+                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
+                    )
+                ]),
+                
+                html.Div([
+                    html.Label("Twitter Bearer Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
+                    dcc.Input(
+                        id="api-key-twitter",
+                        type="text",
+                        placeholder="Ingrese su bearer token de Twitter",
+                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
+                    )
+                ]),
+                
+                html.Div([
+                    html.Label("Facebook Access Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
+                    dcc.Input(
+                        id="api-key-facebook",
+                        type="text",
+                        placeholder="Ingrese su access token de Facebook",
+                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
+                    )
+                ]),
+                
+                html.Div([
+                    html.Label("Instagram Access Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
+                    dcc.Input(
+                        id="api-key-instagram",
+                        type="text",
+                        placeholder="Ingrese su access token de Instagram",
+                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
+                    )
+                ]),
+                
+                html.Div([
+                    html.Label("Reddit Client ID:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
+                    dcc.Input(
+                        id="api-key-reddit",
+                        type="text",
+                        placeholder="Ingrese su client ID de Reddit",
+                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
+                    )
+                ]),
+                
+                html.Div([
+                    html.Label("NewsAPI Key:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
+                    dcc.Input(
+                        id="api-key-newsapi",
+                        type="text",
+                        placeholder="Ingrese su key de NewsAPI",
+                        style={"width": "100%", "padding": "8px", "marginBottom": "20px", "borderRadius": "4px", "border": "1px solid #ddd"}
+                    )
+                ]),
+                
+                html.Div([
+                    html.Button(
+                        "Guardar",
+                        id="save-api-keys",
+                        n_clicks=0,
+                        style={
+                            "backgroundColor": "#3498db",
+                            "color": "white",
+                            "border": "none",
+                            "padding": "10px 25px",
+                            "borderRadius": "5px",
+                            "cursor": "pointer",
+                            "marginRight": "10px",
+                            "fontWeight": "500"
+                        }
+                    ),
+                    html.Button(
+                        "Cancelar",
+                        id="cancel-api-keys",
+                        n_clicks=0,
+                        style={
+                            "backgroundColor": "#95a5a6",
+                            "color": "white",
+                            "border": "none",
+                            "padding": "10px 25px",
+                            "borderRadius": "5px",
+                            "cursor": "pointer",
+                            "fontWeight": "500"
+                        }
+                    )
+                ], style={"textAlign": "right"})
+            ], style={
+                "backgroundColor": "white",
+                "padding": "30px",
+                "borderRadius": "8px",
+                "boxShadow": "0 4px 6px rgba(0,0,0,0.1)",
+                "maxWidth": "600px",
+                "width": "90%",
+                "maxHeight": "90vh",
+                "overflowY": "auto"
+            })
+        ], style={
+            "position": "fixed",
+            "top": "0",
+            "left": "0",
+            "width": "100%",
+            "height": "100%",
+            "backgroundColor": "rgba(0,0,0,0.5)",
+            "display": "flex",
+            "justifyContent": "center",
+            "alignItems": "center",
+            "zIndex": "1000"
+        })
+    ], id="api-keys-modal", style={"display": "block"}),
+    
     # Header
     html.Div([
-        html.H1("Episcopio", style={"color": "#2c3e50", "margin": "0"}),
-        html.P(
-            "Tomando el pulso epidemiológico de México",
-            style={"color": "#7f8c8d", "margin": "5px 0"}
-        )
+        html.Div([
+            html.H1("Episcopio", style={"color": "#2c3e50", "margin": "0"}),
+            html.P(
+                "Tomando el pulso epidemiológico de México",
+                style={"color": "#7f8c8d", "margin": "5px 0"}
+            )
+        ], style={"flex": "1"}),
+        html.Div([
+            html.Div(
+                id="data-mode-indicator",
+                children="🎭 Modo: Datos de Muestra",
+                style={
+                    "backgroundColor": "#f39c12",
+                    "color": "white",
+                    "padding": "8px 15px",
+                    "borderRadius": "20px",
+                    "fontSize": "14px",
+                    "fontWeight": "500"
+                }
+            ),
+            html.Button(
+                "⚙️ Configurar API Keys",
+                id="open-api-modal",
+                n_clicks=0,
+                style={
+                    "backgroundColor": "#3498db",
+                    "color": "white",
+                    "border": "none",
+                    "padding": "8px 15px",
+                    "borderRadius": "5px",
+                    "cursor": "pointer",
+                    "marginLeft": "10px",
+                    "fontWeight": "500"
+                }
+            )
+        ], style={"display": "flex", "alignItems": "center"})
     ], style={
         "backgroundColor": "#ecf0f1",
         "padding": "20px",
-        "borderBottom": "3px solid #3498db"
+        "borderBottom": "3px solid #3498db",
+        "display": "flex",
+        "justifyContent": "space-between",
+        "alignItems": "center"
     }),
     
     # Main content
@@ -177,6 +344,102 @@ app.layout = html.Div([
         "marginTop": "30px"
     })
 ])
+
+
+# Callback to handle modal visibility
+@app.callback(
+    Output("api-keys-modal", "style"),
+    [Input("save-api-keys", "n_clicks"),
+     Input("cancel-api-keys", "n_clicks"),
+     Input("open-api-modal", "n_clicks")],
+    [State("api-keys-modal", "style")]
+)
+def toggle_modal(save_clicks, cancel_clicks, open_clicks, current_style):
+    """Toggle modal visibility."""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        # Show modal on initial load
+        return {"display": "block"}
+    
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if button_id == "open-api-modal":
+        return {"display": "block"}
+    elif button_id in ["save-api-keys", "cancel-api-keys"]:
+        return {"display": "none"}
+    
+    return current_style or {"display": "block"}
+
+
+# Callback to save API keys
+@app.callback(
+    [Output("api-keys-store", "data"),
+     Output("use-sample-data-store", "data")],
+    [Input("save-api-keys", "n_clicks"),
+     Input("cancel-api-keys", "n_clicks")],
+    [State("api-key-inegi", "value"),
+     State("api-key-twitter", "value"),
+     State("api-key-facebook", "value"),
+     State("api-key-instagram", "value"),
+     State("api-key-reddit", "value"),
+     State("api-key-newsapi", "value")]
+)
+def save_api_keys(save_clicks, cancel_clicks, inegi, twitter, facebook, instagram, reddit, newsapi):
+    """Save API keys and determine data mode."""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return {}, True
+    
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if button_id == "cancel-api-keys":
+        # User wants to use sample data
+        api_client.set_sample_mode(True)
+        return {}, True
+    
+    if button_id == "save-api-keys":
+        # Collect provided keys
+        keys = {}
+        if inegi:
+            keys["inegi"] = inegi
+        if twitter:
+            keys["twitter"] = twitter
+        if facebook:
+            keys["facebook"] = facebook
+        if instagram:
+            keys["instagram"] = instagram
+        if reddit:
+            keys["reddit"] = reddit
+        if newsapi:
+            keys["newsapi"] = newsapi
+        
+        # Update API client with keys
+        api_client.set_api_keys(keys)
+        
+        # If any keys provided, use real data mode
+        use_sample = len(keys) == 0
+        api_client.set_sample_mode(use_sample)
+        
+        return keys, use_sample
+    
+    return {}, True
+
+
+# Callback to update data mode indicator
+@app.callback(
+    Output("data-mode-indicator", "children"),
+    [Input("use-sample-data-store", "data"),
+     Input("api-keys-store", "data")]
+)
+def update_data_mode_indicator(use_sample, api_keys):
+    """Update the data mode indicator."""
+    if use_sample:
+        return "🎭 Modo: Datos de Muestra"
+    else:
+        platforms = list(api_keys.keys()) if api_keys else []
+        if platforms:
+            return f"✅ Modo: Datos Reales ({', '.join(platforms)})"
+        return "🎭 Modo: Datos de Muestra"
 
 
 @app.callback(
