@@ -416,7 +416,7 @@ def toggle_modal(save_clicks, cancel_clicks, open_clicks, current_style):
      State("api-key-newsapi", "value")]
 )
 def save_api_keys(save_clicks, cancel_clicks, inegi, twitter, facebook, reddit, newsapi):
-    """Save API keys and determine data mode."""
+    """Save API keys for INEGI, Twitter, Facebook, Reddit, and NewsAPI, and determine data mode."""
     ctx = dash.callback_context
     if not ctx.triggered:
         return {}, True
