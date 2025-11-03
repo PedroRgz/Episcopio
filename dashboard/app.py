@@ -371,7 +371,10 @@ app.layout = html.Div(
                     style={'color': COLORS['text'], 'margin': '0', 'fontSize': '0.9rem'}
                 ),
                 html.P(
-                    "📓 Explora los procesos ETL en el Jupyter Notebook incluido",
+                    [
+                        html.Span("📓", role="img", aria_label="Jupyter Notebook"),
+                        " Explora los procesos ETL en el Jupyter Notebook incluido"
+                    ],
                     style={'color': COLORS['text'], 'margin': '10px 0 0 0', 'fontSize': '0.85rem', 'fontStyle': 'italic'}
                 )
             ]
