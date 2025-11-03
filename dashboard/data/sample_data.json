@@ -1,0 +1,147 @@
+{
+  "meta": {
+    "description": "Datos de muestra para demostración de Episcopio",
+    "last_updated": "2025-01-15T12:00:00Z",
+    "is_sample": true
+  },
+  "kpis": {
+    "31": {
+      "casos_totales": 12500,
+      "casos_activos": 450,
+      "defunciones": 350,
+      "variacion_casos": 8,
+      "variacion_activos": 12,
+      "variacion_defunciones": 3
+    },
+    "23": {
+      "casos_totales": 8200,
+      "casos_activos": 320,
+      "defunciones": 180,
+      "variacion_casos": 5,
+      "variacion_activos": 8,
+      "variacion_defunciones": 2
+    },
+    "04": {
+      "casos_totales": 5100,
+      "casos_activos": 150,
+      "defunciones": 120,
+      "variacion_casos": 3,
+      "variacion_activos": 4,
+      "variacion_defunciones": 1
+    },
+    "09": {
+      "casos_totales": 45000,
+      "casos_activos": 1800,
+      "defunciones": 2200,
+      "variacion_casos": 15,
+      "variacion_activos": 20,
+      "variacion_defunciones": 8
+    },
+    "19": {
+      "casos_totales": 18500,
+      "casos_activos": 650,
+      "defunciones": 580,
+      "variacion_casos": 10,
+      "variacion_activos": 14,
+      "variacion_defunciones": 5
+    }
+  },
+  "timeseries": {
+    "31": {
+      "serie_oficial": [
+        {"fecha": "2024-12-01", "casos": 150, "defunciones": 5},
+        {"fecha": "2024-12-02", "casos": 165, "defunciones": 6},
+        {"fecha": "2024-12-03", "casos": 172, "defunciones": 5},
+        {"fecha": "2024-12-04", "casos": 180, "defunciones": 7},
+        {"fecha": "2024-12-05", "casos": 195, "defunciones": 8},
+        {"fecha": "2024-12-06", "casos": 210, "defunciones": 9},
+        {"fecha": "2024-12-07", "casos": 225, "defunciones": 10},
+        {"fecha": "2024-12-08", "casos": 240, "defunciones": 11},
+        {"fecha": "2024-12-09", "casos": 255, "defunciones": 12},
+        {"fecha": "2024-12-10", "casos": 270, "defunciones": 13},
+        {"fecha": "2024-12-11", "casos": 285, "defunciones": 14},
+        {"fecha": "2024-12-12", "casos": 300, "defunciones": 15},
+        {"fecha": "2024-12-13", "casos": 315, "defunciones": 16},
+        {"fecha": "2024-12-14", "casos": 330, "defunciones": 17},
+        {"fecha": "2024-12-15", "casos": 345, "defunciones": 18}
+      ],
+      "serie_social": {
+        "menciones": [
+          {"fecha": "2024-12-01", "conteo": 120, "sentimiento": -0.15},
+          {"fecha": "2024-12-02", "conteo": 135, "sentimiento": -0.22},
+          {"fecha": "2024-12-03", "conteo": 145, "sentimiento": -0.18},
+          {"fecha": "2024-12-04", "conteo": 160, "sentimiento": -0.25},
+          {"fecha": "2024-12-05", "conteo": 175, "sentimiento": -0.30},
+          {"fecha": "2024-12-06", "conteo": 190, "sentimiento": -0.28},
+          {"fecha": "2024-12-07", "conteo": 205, "sentimiento": -0.35},
+          {"fecha": "2024-12-08", "conteo": 220, "sentimiento": -0.32},
+          {"fecha": "2024-12-09", "conteo": 235, "sentimiento": -0.38},
+          {"fecha": "2024-12-10", "conteo": 250, "sentimiento": -0.40},
+          {"fecha": "2024-12-11", "conteo": 265, "sentimiento": -0.42},
+          {"fecha": "2024-12-12", "conteo": 280, "sentimiento": -0.45},
+          {"fecha": "2024-12-13", "conteo": 295, "sentimiento": -0.43},
+          {"fecha": "2024-12-14", "conteo": 310, "sentimiento": -0.48},
+          {"fecha": "2024-12-15", "conteo": 325, "sentimiento": -0.50}
+        ]
+      }
+    },
+    "23": {
+      "serie_oficial": [
+        {"fecha": "2024-12-01", "casos": 95, "defunciones": 3},
+        {"fecha": "2024-12-02", "casos": 105, "defunciones": 3},
+        {"fecha": "2024-12-03", "casos": 112, "defunciones": 4},
+        {"fecha": "2024-12-04", "casos": 120, "defunciones": 4},
+        {"fecha": "2024-12-05", "casos": 130, "defunciones": 5},
+        {"fecha": "2024-12-06", "casos": 142, "defunciones": 5},
+        {"fecha": "2024-12-07", "casos": 155, "defunciones": 6},
+        {"fecha": "2024-12-08", "casos": 168, "defunciones": 6},
+        {"fecha": "2024-12-09", "casos": 180, "defunciones": 7},
+        {"fecha": "2024-12-10", "casos": 195, "defunciones": 7},
+        {"fecha": "2024-12-11", "casos": 210, "defunciones": 8},
+        {"fecha": "2024-12-12", "casos": 225, "defunciones": 8},
+        {"fecha": "2024-12-13", "casos": 240, "defunciones": 9},
+        {"fecha": "2024-12-14", "casos": 255, "defunciones": 9},
+        {"fecha": "2024-12-15", "casos": 270, "defunciones": 10}
+      ],
+      "serie_social": {
+        "menciones": [
+          {"fecha": "2024-12-01", "conteo": 75, "sentimiento": -0.10},
+          {"fecha": "2024-12-02", "conteo": 82, "sentimiento": -0.12},
+          {"fecha": "2024-12-03", "conteo": 90, "sentimiento": -0.15},
+          {"fecha": "2024-12-04", "conteo": 98, "sentimiento": -0.18},
+          {"fecha": "2024-12-05", "conteo": 105, "sentimiento": -0.20},
+          {"fecha": "2024-12-06", "conteo": 115, "sentimiento": -0.22},
+          {"fecha": "2024-12-07", "conteo": 125, "sentimiento": -0.25},
+          {"fecha": "2024-12-08", "conteo": 135, "sentimiento": -0.28},
+          {"fecha": "2024-12-09", "conteo": 145, "sentimiento": -0.30},
+          {"fecha": "2024-12-10", "conteo": 155, "sentimiento": -0.32},
+          {"fecha": "2024-12-11", "conteo": 165, "sentimiento": -0.35},
+          {"fecha": "2024-12-12", "conteo": 175, "sentimiento": -0.38},
+          {"fecha": "2024-12-13", "conteo": 185, "sentimiento": -0.40},
+          {"fecha": "2024-12-14", "conteo": 195, "sentimiento": -0.42},
+          {"fecha": "2024-12-15", "conteo": 205, "sentimiento": -0.45}
+        ]
+      }
+    }
+  },
+  "alerts": [
+    {
+      "tipo": "incremento_casos",
+      "regla": "delta_threshold_exceeded",
+      "estado": "activa",
+      "entidad": "31",
+      "morbilidad": "COVID-19",
+      "created_at": "2024-12-14T08:30:00Z",
+      "mensaje": "Incremento significativo de casos en Yucatán"
+    },
+    {
+      "tipo": "sentimiento_negativo",
+      "regla": "sentiment_threshold",
+      "estado": "activa",
+      "entidad": "31",
+      "morbilidad": "COVID-19",
+      "created_at": "2024-12-15T10:15:00Z",
+      "mensaje": "Sentimiento negativo detectado en redes sociales"
+    }
+  ]
+}
