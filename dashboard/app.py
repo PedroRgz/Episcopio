@@ -372,7 +372,7 @@ app.layout = html.Div(
                 ),
                 html.P(
                     [
-                        html.Span("📓", role="img", aria_label="Jupyter Notebook"),
+                        html.Span("📓", role="img", **{"aria-label": "Jupyter Notebook"}),
                         " Explora los procesos ETL en el Jupyter Notebook incluido"
                     ],
                     style={'color': COLORS['text'], 'margin': '10px 0 0 0', 'fontSize': '0.85rem', 'fontStyle': 'italic'}
