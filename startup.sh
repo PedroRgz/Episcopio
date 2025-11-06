@@ -13,6 +13,14 @@ echo "Python version: $(python3 --version)"
 echo "Working directory: $(pwd)"
 echo "WEBSITES_PORT: ${WEBSITES_PORT:-not set}"
 
+# Check if curl is available (needed for health checks)
+if ! command -v curl &> /dev/null; then
+    echo "WARNING: curl is not available. Health checks will be skipped."
+    CURL_AVAILABLE=false
+else
+    CURL_AVAILABLE=true
+fi
+
 # Install dependencies if not already installed
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
@@ -61,31 +69,46 @@ echo "Waiting for API to be ready (timeout: ${EP_API_WAIT_SECONDS}s)..."
 API_HEALTH_URL="${EP_API_URL}/api/v1/health"
 SECONDS_WAITED=0
 
-until curl --silent --fail "$API_HEALTH_URL" > /dev/null 2>&1; do
-    sleep 2
-    SECONDS_WAITED=$((SECONDS_WAITED+2))
-    echo "  Waiting for API... (${SECONDS_WAITED}s/${EP_API_WAIT_SECONDS}s)"
+if [ "$CURL_AVAILABLE" = true ]; then
+    until curl --silent --fail "$API_HEALTH_URL" > /dev/null 2>&1; do
+        sleep 2
+        SECONDS_WAITED=$((SECONDS_WAITED+2))
+        echo "  Waiting for API... (${SECONDS_WAITED}s/${EP_API_WAIT_SECONDS}s)"
+        
+        # Check if API process is still running
+        if ! kill -0 $API_PID 2>/dev/null; then
+            echo "ERROR: API process died. Check logs:"
+            cat /tmp/api.log
+            exit 1
+        fi
+        
+        if [ "$SECONDS_WAITED" -ge "$EP_API_WAIT_SECONDS" ]; then
+            echo "WARNING: API did not become ready after ${EP_API_WAIT_SECONDS} seconds."
+            echo "API logs:"
+            cat /tmp/api.log
+            echo "Continuing anyway to start Dashboard..."
+            break
+        fi
+    done
+
+    if curl --silent --fail "$API_HEALTH_URL" > /dev/null 2>&1; then
+        echo "✓ API is ready and responding!"
+    else
+        echo "⚠ API may not be fully ready, but continuing..."
+    fi
+else
+    # If curl is not available, just wait for a fixed time
+    echo "  Waiting ${EP_API_WAIT_SECONDS}s for API to start (curl not available for health check)..."
+    sleep "$EP_API_WAIT_SECONDS"
     
     # Check if API process is still running
-    if ! kill -0 $API_PID 2>/dev/null; then
+    if kill -0 $API_PID 2>/dev/null; then
+        echo "✓ API process is running"
+    else
         echo "ERROR: API process died. Check logs:"
         cat /tmp/api.log
         exit 1
     fi
-    
-    if [ "$SECONDS_WAITED" -ge "$EP_API_WAIT_SECONDS" ]; then
-        echo "WARNING: API did not become ready after ${EP_API_WAIT_SECONDS} seconds."
-        echo "API logs:"
-        cat /tmp/api.log
-        echo "Continuing anyway to start Dashboard..."
-        break
-    fi
-done
-
-if curl --silent --fail "$API_HEALTH_URL" > /dev/null 2>&1; then
-    echo "✓ API is ready and responding!"
-else
-    echo "⚠ API may not be fully ready, but continuing..."
 fi
 
 # Start Dashboard on the port Azure expects
