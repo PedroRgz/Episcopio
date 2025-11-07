@@ -186,8 +186,8 @@ echo "Starting Dashboard service on port 8050..."
 echo "=========================================="
 cd dashboard
 # Use Gunicorn for Dashboard (Dash app)
-# The app instance is in app.py as 'app.server' (Flask server behind Dash)
-gunicorn app:app.server \
+# The app instance is in app.py as 'server' (Flask server behind Dash)
+gunicorn app:server \
   --workers 2 \
   --bind 0.0.0.0:8050 \
   --access-logfile /tmp/dashboard-access.log \
