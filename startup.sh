@@ -204,7 +204,7 @@ RETRY_COUNT=0
 DASHBOARD_PID=""
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     sleep 1
-    DASHBOARD_PID=$(pgrep -f "gunicorn app:app.server" | head -1)
+    DASHBOARD_PID=$(pgrep -f "gunicorn app:server" | head -1)
     if [ -n "$DASHBOARD_PID" ]; then
         break
     fi
