@@ -62,7 +62,7 @@ fi
 
 echo ""
 echo "Test 5: Checking for Gunicorn usage in Dashboard..."
-if grep -q "gunicorn app:app.server" startup.sh; then
+if grep -q "gunicorn app:server" startup.sh; then
     echo "✓ Dashboard uses Gunicorn"
 else
     echo "✗ FAIL: Dashboard doesn't use Gunicorn"
