@@ -52,6 +52,9 @@ export EP_POSTGRES_PASSWORD=${EP_POSTGRES_PASSWORD:-changeme}
 export EP_POSTGRES_DATABASE=${EP_POSTGRES_DATABASE:-episcopio}
 export EP_POSTGRES_PORT=${EP_POSTGRES_PORT:-5432}
 export EP_REDIS_URL=${EP_REDIS_URL:-redis://localhost:6379/0}
+# For local/dev: use http://localhost:8000 (both services run on different ports)
+# For Azure/production: use /api (both services behind same domain with reverse proxy)
+# Set to http://localhost:8000 here since startup.sh runs both services locally
 export EP_API_URL=${EP_API_URL:-http://localhost:8000}
 
 echo "Environment variables configured:"
