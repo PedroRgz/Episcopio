@@ -83,7 +83,7 @@ Las siguientes variables de entorno deben configurarse al desplegar en Azure:
 - `EP_SECURITY_CORS_ALLOWED_ORIGINS` - Orígenes permitidos para CORS (separados por comas), ej: `https://episcopio.mx,https://www.episcopio.mx`
 
 **Opcionales:**
-- `EP_API_URL` - URL base para el API. Default: `http://localhost:8000` para Azure Web Apps (servicios en mismo contenedor). Use `/api` solo con reverse proxy (nginx/Azure Application Gateway). Use URL completa para servicios en hosts separados.
+- `EP_API_URL` - URL base para el API. Configuración según escenario: `http://localhost:8000` para Azure Web Apps (servicios en mismo contenedor, configurado por startup.sh), `/api` para reverse proxy (nginx/Azure Application Gateway), o URL completa para servicios en hosts separados.
 - `EP_REDIS_URL` - URL de Redis para caché
 - `EP_POSTGRES_PORT` - Puerto de PostgreSQL (default: 5432)
 
