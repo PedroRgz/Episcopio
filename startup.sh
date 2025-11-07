@@ -4,7 +4,7 @@
 # 
 # Deployment Architecture:
 # - Single process running both API and Dashboard
-# - Dashboard served at "/dashboard"
+# - Dashboard served at "/" (root)
 # - API endpoints available at "/api/v1/*"
 # - Listens on port 8000 only (no separate port 8050)
 # - Ideal for Azure Web App deployment
@@ -70,8 +70,10 @@ echo "  EP_SECURITY_CORS_ALLOWED_ORIGINS: ${EP_SECURITY_CORS_ALLOWED_ORIGINS:-no
 # Start unified application (API + Dashboard in single process)
 echo "=========================================="
 echo "Starting unified application on port 8000..."
-echo "  - Dashboard at: /dashboard"
+echo "  - Dashboard at: / (root)"
 echo "  - API at: /api/v1/*"
+echo "  - Health check: /api/v1/health"
+echo "  - Diagnostics: /__unified_ping"
 echo "=========================================="
 
 # Use Gunicorn with Uvicorn workers for the unified FastAPI+Dash app
