@@ -141,7 +141,10 @@ az webapp config appsettings set \
 
 **Notas importantes sobre variables de entorno:**
 
-- `EP_API_URL`: Para Azure Web Apps, use `http://localhost:8000` porque ambos servicios (API y Dashboard) corren en el mismo contenedor y se comunican internamente via localhost. Solo use `/api` (ruta relativa) cuando tenga un reverse proxy (nginx o Azure Application Gateway) que enrute las peticiones. Use URL completa (ej: `https://api.episcopio.mx`) solo si los servicios están en hosts/dominios completamente separados.
+- `EP_API_URL`: Configuración según escenario de despliegue:
+  - **Azure Web Apps**: Use `http://localhost:8000`. Ambos servicios (API y Dashboard) corren en el mismo contenedor y se comunican internamente via localhost.
+  - **Azure VM con reverse proxy**: Use `/api` (ruta relativa). Requiere nginx o Azure Application Gateway que enrute las peticiones `/api/*` al puerto 8000.
+  - **Servicios en dominios separados**: Use URL completa (ej: `https://api.episcopio.mx`) cuando los servicios estén en hosts diferentes.
 - `EP_SECURITY_CORS_ALLOWED_ORIGINS`: Lista separada por comas de orígenes permitidos. Incluya todos los dominios desde donde se accederá a la aplicación (con y sin www si aplica).
 - `WEBSITES_PORT`: Puerto que Azure expondrá públicamente (8050 para Dashboard). La API en puerto 8000 NO está expuesta externamente, solo accesible internamente via localhost.
 
