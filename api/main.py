@@ -75,9 +75,9 @@ class SurveyRequest(BaseModel):
 
 
 # Endpoints
-@app.get("/")
-def root():
-    """Root endpoint."""
+@app.get("/api/v1/status")
+def status():
+    """Status endpoint with version information."""
     return {
         "app": app_settings.name,
         "version": app_settings.version,

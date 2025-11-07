@@ -56,8 +56,9 @@ Esto creará un entorno virtual, instalará dependencias y arrancará ambos serv
 
 3. **Acceder a la aplicación**
 
-- **Dashboard**: http://localhost:8050
-- **API**: http://localhost:8000
+- **Application (Dashboard + API)**: http://localhost:8000
+- **Dashboard**: http://localhost:8000
+- **API**: http://localhost:8000/api/v1/
 - **API Docs**: http://localhost:8000/docs
 
 ### Despliegue en Azure
@@ -83,7 +84,7 @@ Las siguientes variables de entorno deben configurarse al desplegar en Azure:
 - `EP_SECURITY_CORS_ALLOWED_ORIGINS` - Orígenes permitidos para CORS (separados por comas), ej: `https://episcopio.mx,https://www.episcopio.mx`
 
 **Opcionales:**
-- `EP_API_URL` - URL base para el API. Configuración según escenario: `http://localhost:8000` para Azure Web Apps (servicios en mismo contenedor, configurado por startup.sh), `/api` para reverse proxy (nginx/Azure Application Gateway), o URL completa para servicios en hosts separados.
+- `EP_API_URL` - URL base para el API. Por defecto `/api/v1` (relativo) para el despliegue unificado. Usar URL completa solo si API y Dashboard están en hosts separados.
 - `EP_REDIS_URL` - URL de Redis para caché
 - `EP_POSTGRES_PORT` - Puerto de PostgreSQL (default: 5432)
 
@@ -91,7 +92,7 @@ Las siguientes variables de entorno deben configurarse al desplegar en Azure:
 
 ### Dashboard
 
-Accede al dashboard en http://localhost:8050 para:
+Accede al dashboard en http://localhost:8000 para:
 
 - Visualizar KPIs por entidad federativa
 - Ver series temporales de casos y defunciones
