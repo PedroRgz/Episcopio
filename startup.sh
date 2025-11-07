@@ -75,7 +75,7 @@ echo "  - API at: /api/v1/*"
 echo "=========================================="
 
 # Use Gunicorn with Uvicorn workers for the unified FastAPI+Dash app
-exec gunicorn api.unified:app \
+gunicorn api.unified:app \
   --workers 2 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000 \
@@ -83,4 +83,13 @@ exec gunicorn api.unified:app \
   --error-logfile /tmp/app-error.log \
   --log-level info \
   --timeout 120
+
+# Capture exit code for logging
+EXIT_CODE=$?
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "ERROR: Gunicorn exited with code $EXIT_CODE"
+    echo "=== Error Log ==="
+    tail -50 /tmp/app-error.log 2>/dev/null || echo "No error log found"
+    exit $EXIT_CODE
+fi
 

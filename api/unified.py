@@ -15,7 +15,6 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI
 from starlette.middleware.wsgi import WSGIMiddleware
 from api.main import app as fastapi_app
 from dashboard.app import build_dashboard_app
