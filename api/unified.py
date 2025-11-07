@@ -1,7 +1,7 @@
-"""Unified application - FastAPI with Dash dashboard mounted at root.
+"""Unified application - FastAPI with Dash dashboard.
 
 This module creates a single application that serves:
-- Dashboard (Dash/Plotly) at the root path "/"
+- Dashboard (Dash/Plotly) at "/dashboard"
 - API endpoints (FastAPI) at "/api/v1/*"
 
 This unified approach simplifies deployment to Azure App Service by:

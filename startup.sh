@@ -4,7 +4,7 @@
 # 
 # Deployment Architecture:
 # - Single process running both API and Dashboard
-# - Dashboard served at root path "/"
+# - Dashboard served at "/dashboard"
 # - API endpoints available at "/api/v1/*"
 # - Listens on port 8000 only (no separate port 8050)
 # - Ideal for Azure Web App deployment
@@ -70,7 +70,7 @@ echo "  EP_SECURITY_CORS_ALLOWED_ORIGINS: ${EP_SECURITY_CORS_ALLOWED_ORIGINS:-no
 # Start unified application (API + Dashboard in single process)
 echo "=========================================="
 echo "Starting unified application on port 8000..."
-echo "  - Dashboard at: /"
+echo "  - Dashboard at: /dashboard"
 echo "  - API at: /api/v1/*"
 echo "=========================================="
 
