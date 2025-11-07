@@ -10,23 +10,34 @@ Episcopio consta de dos servicios principales:
 
 ### Estrategias de Despliegue
 
-**Opción A: Servicios detrás de un reverse proxy (Recomendado)**
+**Opción A: Azure Web Apps - Servicios en el mismo contenedor (Recomendado para simplicidad)**
+- Ambos servicios (API y Dashboard) corren en el mismo contenedor
+- Solo el Dashboard (puerto 8050) está expuesto públicamente
+- La API (puerto 8000) solo es accesible internamente via localhost
+- Variables de entorno: `EP_API_URL=http://localhost:8000` y `EP_SECURITY_CORS_ALLOWED_ORIGINS=https://your-domain.com`
+- **Ventajas**: Configuración más simple, menor costo, ideal para MVP
+- **Desventajas**: API no accesible externamente, escalabilidad limitada
+
+**Opción B: Azure VM con reverse proxy (Recomendado para producción)**
+- Servicios detrás de Nginx que actúa como reverse proxy
 - Un solo dominio público expone ambos servicios
-- Nginx o Azure Application Gateway enruta:
+- Nginx enruta:
   - `/*` → Dashboard (puerto 8050)
   - `/api/*` → API (puerto 8000)
 - Variables de entorno: `EP_API_URL=/api` y `EP_SECURITY_CORS_ALLOWED_ORIGINS=https://your-domain.com`
+- **Ventajas**: API accesible externamente, mejor control, más escalable
+- **Desventajas**: Requiere más configuración
 
-**Opción B: Servicios en dominios separados**
+**Opción C: Servicios en dominios separados**
 - API en `https://api.episcopio.mx`
 - Dashboard en `https://episcopio.mx`
 - Variables de entorno: `EP_API_URL=https://api.episcopio.mx` y `EP_SECURITY_CORS_ALLOWED_ORIGINS=https://episcopio.mx`
+- **Ventajas**: Máxima flexibilidad, escalabilidad independiente
+- **Desventajas**: Mayor costo, más complejo de mantener
 
-Esta guía se enfoca en la Opción A (reverse proxy) por ser más simple y económica.
+## Opción A: Azure Web Apps (Recomendado para MVP)
 
-## Opción 1: Azure Web Apps (Recomendado)
-
-Azure Web Apps es la forma más sencilla de desplegar aplicaciones Python en Azure sin preocuparse por la infraestructura.
+Azure Web Apps es la forma más sencilla de desplegar aplicaciones Python en Azure sin preocuparse por la infraestructura. En esta configuración, ambos servicios (API y Dashboard) corren en el mismo contenedor y se comunican internamente via localhost.
 
 ### Prerrequisitos
 
@@ -123,16 +134,16 @@ az webapp config appsettings set \
     EP_POSTGRES_PASSWORD=<CONTRASEÑA_SEGURA> \
     EP_POSTGRES_DATABASE=episcopio \
     EP_POSTGRES_PORT=5432 \
-    EP_API_URL=/api \
+    EP_API_URL=http://localhost:8000 \
     EP_SECURITY_CORS_ALLOWED_ORIGINS="https://${APP_DOMAIN},https://www.${APP_DOMAIN}" \
     WEBSITES_PORT=8050
 ```
 
 **Notas importantes sobre variables de entorno:**
 
-- `EP_API_URL`: Use `/api` (ruta relativa) cuando API y Dashboard estén detrás del mismo dominio con reverse proxy. Use URL completa (ej: `https://api.episcopio.mx`) si los servicios están en dominios separados.
+- `EP_API_URL`: Para Azure Web Apps, use `http://localhost:8000` porque ambos servicios (API y Dashboard) corren en el mismo contenedor y se comunican internamente via localhost. Solo use `/api` (ruta relativa) cuando tenga un reverse proxy (nginx o Azure Application Gateway) que enrute las peticiones. Use URL completa (ej: `https://api.episcopio.mx`) solo si los servicios están en hosts/dominios completamente separados.
 - `EP_SECURITY_CORS_ALLOWED_ORIGINS`: Lista separada por comas de orígenes permitidos. Incluya todos los dominios desde donde se accederá a la aplicación (con y sin www si aplica).
-- `WEBSITES_PORT`: Puerto que Azure expondrá públicamente (8050 para Dashboard principal).
+- `WEBSITES_PORT`: Puerto que Azure expondrá públicamente (8050 para Dashboard). La API en puerto 8000 NO está expuesta externamente, solo accesible internamente via localhost.
 
 Si usa un dominio personalizado (ej: `episcopio.mx`), actualice la variable CORS:
 ```bash
@@ -189,9 +200,9 @@ La aplicación estará disponible en: `https://episcopio-app.azurewebsites.net`
 
 ---
 
-## Opción 2: Máquina Virtual en Azure
+## Opción B: Máquina Virtual en Azure con Nginx (Reverse Proxy)
 
-Si prefieres más control sobre el entorno, puedes desplegar en una VM.
+Si prefieres más control sobre el entorno y quieres exponer la API externamente, puedes desplegar en una VM con Nginx como reverse proxy. Esta configuración permite que ambos servicios sean accesibles desde el mismo dominio público.
 
 ### Paso 1: Crear una VM
 
