@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from .sample_data_loader import sample_data_loader
 
 
-BASE_URL = os.getenv("EP_API_URL", "http://api:8000")
+BASE_URL = os.getenv("EP_API_URL", "/api")
 TIMEOUT = 30
 
 

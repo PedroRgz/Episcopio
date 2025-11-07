@@ -2,6 +2,28 @@
 
 Esta guía describe cómo desplegar Episcopio en Azure usando Azure Web Apps o una máquina virtual.
 
+## Arquitectura de Despliegue
+
+Episcopio consta de dos servicios principales:
+- **API** (FastAPI): Servicio REST que provee datos epidemiológicos (puerto 8000)
+- **Dashboard** (Dash/Plotly): Interfaz web interactiva (puerto 8050)
+
+### Estrategias de Despliegue
+
+**Opción A: Servicios detrás de un reverse proxy (Recomendado)**
+- Un solo dominio público expone ambos servicios
+- Nginx o Azure Application Gateway enruta:
+  - `/*` → Dashboard (puerto 8050)
+  - `/api/*` → API (puerto 8000)
+- Variables de entorno: `EP_API_URL=/api` y `EP_SECURITY_CORS_ALLOWED_ORIGINS=https://your-domain.com`
+
+**Opción B: Servicios en dominios separados**
+- API en `https://api.episcopio.mx`
+- Dashboard en `https://episcopio.mx`
+- Variables de entorno: `EP_API_URL=https://api.episcopio.mx` y `EP_SECURITY_CORS_ALLOWED_ORIGINS=https://episcopio.mx`
+
+Esta guía se enfoca en la Opción A (reverse proxy) por ser más simple y económica.
+
 ## Opción 1: Azure Web Apps (Recomendado)
 
 Azure Web Apps es la forma más sencilla de desplegar aplicaciones Python en Azure sin preocuparse por la infraestructura.
@@ -88,14 +110,8 @@ az redis create \
 ### Paso 5: Configurar variables de entorno
 
 ```bash
-# Obtener connection string de PostgreSQL
-PG_CONN=$(az postgres flexible-server show-connection-string \
-  --server-name episcopio-db \
-  --admin-user episcopio \
-  --admin-password <CONTRASEÑA> \
-  --database-name episcopio \
-  --query connectionStrings.python \
-  --output tsv)
+# Obtener el dominio de tu aplicación
+APP_DOMAIN="episcopio-app.azurewebsites.net"
 
 # Configurar variables de entorno en la Web App
 az webapp config appsettings set \
@@ -107,8 +123,24 @@ az webapp config appsettings set \
     EP_POSTGRES_PASSWORD=<CONTRASEÑA_SEGURA> \
     EP_POSTGRES_DATABASE=episcopio \
     EP_POSTGRES_PORT=5432 \
-    EP_API_URL=http://localhost:8000 \
+    EP_API_URL=/api \
+    EP_SECURITY_CORS_ALLOWED_ORIGINS="https://${APP_DOMAIN},https://www.${APP_DOMAIN}" \
     WEBSITES_PORT=8050
+```
+
+**Notas importantes sobre variables de entorno:**
+
+- `EP_API_URL`: Use `/api` (ruta relativa) cuando API y Dashboard estén detrás del mismo dominio con reverse proxy. Use URL completa (ej: `https://api.episcopio.mx`) si los servicios están en dominios separados.
+- `EP_SECURITY_CORS_ALLOWED_ORIGINS`: Lista separada por comas de orígenes permitidos. Incluya todos los dominios desde donde se accederá a la aplicación (con y sin www si aplica).
+- `WEBSITES_PORT`: Puerto que Azure expondrá públicamente (8050 para Dashboard principal).
+
+Si usa un dominio personalizado (ej: `episcopio.mx`), actualice la variable CORS:
+```bash
+az webapp config appsettings set \
+  --name episcopio-app \
+  --resource-group episcopio-rg \
+  --settings \
+    EP_SECURITY_CORS_ALLOWED_ORIGINS="https://episcopio.mx,https://www.episcopio.mx"
 ```
 
 ### Paso 6: Desplegar la aplicación
@@ -245,6 +277,9 @@ psql -U episcopio -d episcopio < db/seeds/seed_morbilidades.sql
 ### Paso 6: Configurar variables de entorno
 
 ```bash
+# Obtener la IP pública o dominio de la VM
+PUBLIC_DOMAIN="<your-domain.com>"  # o usar IP pública
+
 # Crear archivo .env
 cat > .env << EOF
 EP_POSTGRES_HOST=localhost
@@ -253,12 +288,15 @@ EP_POSTGRES_PASSWORD=changeme
 EP_POSTGRES_DATABASE=episcopio
 EP_POSTGRES_PORT=5432
 EP_REDIS_URL=redis://localhost:6379/0
-EP_API_URL=http://localhost:8000
+EP_API_URL=/api
+EP_SECURITY_CORS_ALLOWED_ORIGINS=https://${PUBLIC_DOMAIN},http://${PUBLIC_DOMAIN}
 EOF
 
 # Cargar variables de entorno
 export $(cat .env | xargs)
 ```
+
+**Nota:** Con configuración de reverse proxy (nginx), use `EP_API_URL=/api` para que el Dashboard use rutas relativas. El nginx se encargará de enrutar `/api/*` al servicio API en puerto 8000.
 
 ### Paso 7: Configurar servicios systemd
 
@@ -311,6 +349,14 @@ sudo systemctl start episcopio-dashboard
 
 ### Paso 8: Configurar Nginx como proxy reverso
 
+El reverse proxy permite exponer una sola interfaz pública (puerto 80/443) mientras ambos servicios (API y Dashboard) corren en puertos internos separados.
+
+**Arquitectura de puertos:**
+- Puerto 8000: API (interno, no expuesto directamente)
+- Puerto 8050: Dashboard (interno, no expuesto directamente)
+- Puerto 80: Nginx (expuesto públicamente)
+- Puerto 443: Nginx con SSL (expuesto públicamente)
+
 ```bash
 # Configurar Nginx
 sudo tee /etc/nginx/sites-available/episcopio > /dev/null << EOF
@@ -318,6 +364,7 @@ server {
     listen 80;
     server_name _;
 
+    # Dashboard - ruta raíz
     location / {
         proxy_pass http://localhost:8050;
         proxy_http_version 1.1;
@@ -325,22 +372,33 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host \$host;
         proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
+    # API - prefijo /api
     location /api {
         proxy_pass http://localhost:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 EOF
 
 # Habilitar sitio
 sudo ln -s /etc/nginx/sites-available/episcopio /etc/nginx/sites-enabled/
-sudo rm /etc/nginx/sites-enabled/default
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl restart nginx
 ```
+
+**Cómo funciona:**
+1. Usuario accede a `http://your-domain.com` → Nginx enruta a Dashboard (puerto 8050)
+2. Dashboard hace peticiones a `/api/*` → Nginx enruta a API (puerto 8000)
+3. Solo se expone el puerto 80/443 externamente; los puertos 8000 y 8050 permanecen internos
 
 ### Paso 9: Verificar el despliegue
 

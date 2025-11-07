@@ -1,6 +1,13 @@
 #!/bin/bash
-# Startup script for Azure Web App
+# Startup script for Azure Web App / Production Deployment
 # This script initializes and starts both the API and Dashboard services
+# 
+# For Azure Web App deployment, both services run on the same host behind a reverse proxy.
+# The Dashboard runs on port 8050 (default) and API on port 8000.
+# Azure can expose either service through a single port using WEBSITES_PORT environment variable.
+# For production, use a reverse proxy (nginx, Azure App Gateway) to route:
+#   - /api/* -> API service (port 8000)
+#   - /* -> Dashboard service (port 8050)
 
 set -e  # Exit on error
 
@@ -51,6 +58,7 @@ echo "Environment variables configured:"
 echo "  EP_POSTGRES_HOST: ${EP_POSTGRES_HOST}"
 echo "  EP_POSTGRES_DATABASE: ${EP_POSTGRES_DATABASE}"
 echo "  EP_API_URL: ${EP_API_URL}"
+echo "  EP_SECURITY_CORS_ALLOWED_ORIGINS: ${EP_SECURITY_CORS_ALLOWED_ORIGINS:-not set}"
 
 # Start API in background
 echo "=========================================="
