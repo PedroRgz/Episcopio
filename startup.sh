@@ -37,22 +37,34 @@ else
     CURL_AVAILABLE=true
 fi
 
-# Install dependencies if not already installed
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
-else
-    echo "Virtual environment already exists"
-fi
-
-# Activate virtual environment
+# Activate Azure's pre-built virtual environment
+# Azure Oryx extracts a pre-built virtual environment called 'antenv'
+# We need to use it instead of creating a new one
 echo "Activating virtual environment..."
-source venv/bin/activate
+
+# Try to use Azure's antenv if it exists
+if [ -d "antenv" ]; then
+    echo "Found antenv (Azure Oryx virtual environment)"
+    source antenv/bin/activate
+elif [ -f "/opt/python/etc/profile.d/activate.sh" ]; then
+    echo "Using Azure App Service Python environment"
+    source /opt/python/etc/profile.d/activate.sh
+elif [ -d "venv" ]; then
+    echo "Using existing venv"
+    source venv/bin/activate
+else
+    echo "WARNING: No virtual environment found, using system Python"
+fi
 
 # Install dependencies
 echo "Installing dependencies..."
 pip install --upgrade pip --quiet
+# Install root requirements first
 pip install -r requirements.txt --quiet
+# Install API-specific requirements
+pip install -r api/requirements.txt --quiet
+# Install Dashboard-specific requirements
+pip install -r dashboard/requirements.txt --quiet
 
 # Set default environment variables if not set
 export EP_POSTGRES_HOST=${EP_POSTGRES_HOST:-localhost}
@@ -78,10 +90,37 @@ echo "=========================================="
 echo "Starting API service on port 8000..."
 echo "=========================================="
 cd api
-python main.py > /tmp/api.log 2>&1 &
-API_PID=$!
+# Use Gunicorn with Uvicorn workers for production
+gunicorn main:app \
+  --workers 2 \
+  --worker-class uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:8000 \
+  --access-logfile /tmp/api-access.log \
+  --error-logfile /tmp/api-error.log \
+  --log-level info \
+  --daemon
 cd ..
 
+# Get the PID of the gunicorn master process
+# Wait for gunicorn to start with retry logic
+MAX_RETRIES=10
+RETRY_COUNT=0
+API_PID=""
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    sleep 1
+    API_PID=$(pgrep -f "gunicorn main:app" | head -1)
+    if [ -n "$API_PID" ]; then
+        break
+    fi
+    RETRY_COUNT=$((RETRY_COUNT+1))
+done
+
+if [ -z "$API_PID" ]; then
+    echo "ERROR: Failed to get API process PID after ${MAX_RETRIES} retries"
+    echo "=== API Error Log ==="
+    cat /tmp/api-error.log 2>/dev/null || echo "No error log found"
+    exit 1
+fi
 echo "API started with PID: $API_PID"
 
 # Wait for API to be ready using health check with retries
@@ -99,14 +138,20 @@ if [ "$CURL_AVAILABLE" = true ]; then
         # Check if API process is still running
         if ! kill -0 $API_PID 2>/dev/null; then
             echo "ERROR: API process died. Check logs:"
-            cat /tmp/api.log
+            echo "=== API Error Log ==="
+            cat /tmp/api-error.log 2>/dev/null || echo "No error log found"
+            echo "=== API Access Log ==="
+            tail -20 /tmp/api-access.log 2>/dev/null || echo "No access log found"
             exit 1
         fi
         
         if [ "$SECONDS_WAITED" -ge "$EP_API_WAIT_SECONDS" ]; then
             echo "WARNING: API did not become ready after ${EP_API_WAIT_SECONDS} seconds."
             echo "API logs:"
-            cat /tmp/api.log
+            echo "=== API Error Log ==="
+            tail -50 /tmp/api-error.log 2>/dev/null || echo "No error log found"
+            echo "=== API Access Log ==="
+            tail -50 /tmp/api-access.log 2>/dev/null || echo "No access log found"
             echo "Continuing anyway to start Dashboard..."
             break
         fi
@@ -127,7 +172,10 @@ else
         echo "✓ API process is running"
     else
         echo "ERROR: API process died. Check logs:"
-        cat /tmp/api.log
+        echo "=== API Error Log ==="
+        cat /tmp/api-error.log 2>/dev/null || echo "No error log found"
+        echo "=== API Access Log ==="
+        tail -20 /tmp/api-access.log 2>/dev/null || echo "No access log found"
         exit 1
     fi
 fi
@@ -137,10 +185,38 @@ echo "=========================================="
 echo "Starting Dashboard service on port 8050..."
 echo "=========================================="
 cd dashboard
-python app.py > /tmp/dashboard.log 2>&1 &
-DASHBOARD_PID=$!
+# Use Gunicorn for Dashboard (Dash app)
+# The app instance is in app.py as 'app.server' (Flask server behind Dash)
+gunicorn app:app.server \
+  --workers 2 \
+  --bind 0.0.0.0:8050 \
+  --access-logfile /tmp/dashboard-access.log \
+  --error-logfile /tmp/dashboard-error.log \
+  --log-level info \
+  --timeout 120 \
+  --daemon
 cd ..
 
+# Get the PID of the gunicorn master process
+# Wait for gunicorn to start with retry logic
+MAX_RETRIES=10
+RETRY_COUNT=0
+DASHBOARD_PID=""
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    sleep 1
+    DASHBOARD_PID=$(pgrep -f "gunicorn app:app.server" | head -1)
+    if [ -n "$DASHBOARD_PID" ]; then
+        break
+    fi
+    RETRY_COUNT=$((RETRY_COUNT+1))
+done
+
+if [ -z "$DASHBOARD_PID" ]; then
+    echo "ERROR: Failed to get Dashboard process PID after ${MAX_RETRIES} retries"
+    echo "=== Dashboard Error Log ==="
+    cat /tmp/dashboard-error.log 2>/dev/null || echo "No error log found"
+    exit 1
+fi
 echo "Dashboard started with PID: $DASHBOARD_PID"
 
 # Wait a moment for dashboard to start
@@ -151,7 +227,10 @@ if kill -0 $DASHBOARD_PID 2>/dev/null; then
     echo "✓ Dashboard is running"
 else
     echo "ERROR: Dashboard failed to start. Check logs:"
-    cat /tmp/dashboard.log
+    echo "=== Dashboard Error Log ==="
+    cat /tmp/dashboard-error.log 2>/dev/null || echo "No error log found"
+    echo "=== Dashboard Access Log ==="
+    tail -20 /tmp/dashboard-access.log 2>/dev/null || echo "No access log found"
     exit 1
 fi
 
@@ -164,8 +243,10 @@ echo "API available at: http://localhost:8000"
 echo "Dashboard available at: http://localhost:8050"
 echo "=========================================="
 echo "Logs available at:"
-echo "  API: /tmp/api.log"
-echo "  Dashboard: /tmp/dashboard.log"
+echo "  API Access: /tmp/api-access.log"
+echo "  API Error: /tmp/api-error.log"
+echo "  Dashboard Access: /tmp/dashboard-access.log"
+echo "  Dashboard Error: /tmp/dashboard-error.log"
 echo "=========================================="
 
 # Function to handle shutdown
@@ -184,13 +265,15 @@ trap shutdown_handler SIGTERM SIGINT
 while true; do
     if ! kill -0 $API_PID 2>/dev/null; then
         echo "ERROR: API process died!"
-        cat /tmp/api.log
+        echo "=== API Error Log ==="
+        tail -50 /tmp/api-error.log 2>/dev/null || echo "No error log found"
         exit 1
     fi
     
     if ! kill -0 $DASHBOARD_PID 2>/dev/null; then
         echo "ERROR: Dashboard process died!"
-        cat /tmp/dashboard.log
+        echo "=== Dashboard Error Log ==="
+        tail -50 /tmp/dashboard-error.log 2>/dev/null || echo "No error log found"
         exit 1
     fi
     
