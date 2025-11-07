@@ -21,11 +21,11 @@ from api.main import app as fastapi_app
 from dashboard.app import build_dashboard_app
 
 # Build the Dash application
-dash_app = build_dashboard_app(requests_pathname_prefix="/")
+dash_app = build_dashboard_app(requests_pathname_prefix="/dashboard/")
 
-# Mount the Dash Flask server onto FastAPI at root path
-# This makes the Dashboard accessible at "/" and keeps API at "/api/v1/*"
-fastapi_app.mount("/", WSGIMiddleware(dash_app.server))
+# Mount the Dash Flask server onto FastAPI at '/dashboard' path
+# This makes the Dashboard accessible at "/dashboard" and keeps API at "/api/v1/*"
+fastapi_app.mount("/dashboard", WSGIMiddleware(dash_app.server))
 
 # Export the unified app as the main application
 # Gunicorn will use this: api.unified:app
