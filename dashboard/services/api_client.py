@@ -7,9 +7,10 @@ from .sample_data_loader import sample_data_loader
 
 
 # EP_API_URL configuration:
-# - Production with reverse proxy: /api (default)
-# - Same host without proxy (startup.sh, run_local.sh): http://localhost:8000 (set by those scripts)
+# - Azure VM with reverse proxy (nginx): /api (code default, suitable for traditional reverse proxy setup)
+# - Azure Web Apps (startup.sh) or Local dev (run_local.sh): http://localhost:8000 (set by startup scripts)
 # - Separate API domain: https://api.example.com (set via environment variable)
+# Note: startup.sh and run_local.sh always set EP_API_URL=http://localhost:8000, so this default is rarely used
 BASE_URL = os.getenv("EP_API_URL", "/api")
 TIMEOUT = 30
 
