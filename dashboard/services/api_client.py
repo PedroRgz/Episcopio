@@ -6,8 +6,10 @@ from typing import Optional, Dict, Any
 from .sample_data_loader import sample_data_loader
 
 
-# Default to /api for reverse proxy deployment (production-ready)
-# For local development, startup.sh and run_local.sh set EP_API_URL=http://localhost:8000
+# EP_API_URL configuration:
+# - Production with reverse proxy: /api (default)
+# - Same host without proxy (startup.sh, run_local.sh): http://localhost:8000 (set by those scripts)
+# - Separate API domain: https://api.example.com (set via environment variable)
 BASE_URL = os.getenv("EP_API_URL", "/api")
 TIMEOUT = 30
 

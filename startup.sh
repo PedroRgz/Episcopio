@@ -1,13 +1,22 @@
 #!/bin/bash
-# Startup script for Azure Web App / Production Deployment
-# This script initializes and starts both the API and Dashboard services
+# Startup script for Episcopio - supports multiple deployment scenarios
+# This script initializes and starts both the API and Dashboard services on the same host
 # 
-# For Azure Web App deployment, both services run on the same host behind a reverse proxy.
-# The Dashboard runs on port 8050 (default) and API on port 8000.
-# Azure can expose either service through a single port using WEBSITES_PORT environment variable.
-# For production, use a reverse proxy (nginx, Azure App Gateway) to route:
-#   - /api/* -> API service (port 8000)
-#   - /* -> Dashboard service (port 8050)
+# Deployment Scenarios:
+# 1. Azure Web App: Both services run on same host, exposed through WEBSITES_PORT
+#    - Set EP_API_URL=http://localhost:8000 (services communicate via localhost)
+#    - Azure routes external traffic to Dashboard port
+# 
+# 2. Azure VM with reverse proxy (nginx):
+#    - Set EP_API_URL=/api (Dashboard uses relative paths)
+#    - Nginx routes /api/* to port 8000, /* to port 8050
+#    - Only nginx ports (80/443) are exposed publicly
+# 
+# 3. Local development:
+#    - Set EP_API_URL=http://localhost:8000 (services on different ports)
+#    - Both ports (8000, 8050) accessible directly
+# 
+# For reverse proxy setup, remember to configure EP_SECURITY_CORS_ALLOWED_ORIGINS with your domain
 
 set -e  # Exit on error
 
@@ -52,9 +61,10 @@ export EP_POSTGRES_PASSWORD=${EP_POSTGRES_PASSWORD:-changeme}
 export EP_POSTGRES_DATABASE=${EP_POSTGRES_DATABASE:-episcopio}
 export EP_POSTGRES_PORT=${EP_POSTGRES_PORT:-5432}
 export EP_REDIS_URL=${EP_REDIS_URL:-redis://localhost:6379/0}
-# For local/dev: use http://localhost:8000 (both services run on different ports)
-# For Azure/production: use /api (both services behind same domain with reverse proxy)
-# Set to http://localhost:8000 here since startup.sh runs both services locally
+# EP_API_URL configuration depends on deployment scenario:
+# - Same host, separate ports (Azure Web App, local dev): http://localhost:8000
+# - Behind reverse proxy (Azure VM with nginx): /api
+# This script starts both services on the same host, so default to localhost:8000
 export EP_API_URL=${EP_API_URL:-http://localhost:8000}
 
 echo "Environment variables configured:"
