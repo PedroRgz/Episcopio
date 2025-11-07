@@ -67,9 +67,25 @@ Para desplegar en producción usando Azure Web Apps o una VM de Azure, consulta 
 - Configuración de Azure Web Apps
 - Configuración de VM en Azure
 - Configuración de PostgreSQL y Redis
-- Variables de entorno
+- Variables de entorno requeridas (ver abajo)
 - SSL/HTTPS
 - Monitoreo y backup
+
+#### Variables de Entorno para Azure
+
+Las siguientes variables de entorno deben configurarse al desplegar en Azure:
+
+**Requeridas:**
+- `EP_POSTGRES_HOST` - Host del servidor PostgreSQL
+- `EP_POSTGRES_USER` - Usuario de PostgreSQL
+- `EP_POSTGRES_PASSWORD` - Contraseña de PostgreSQL
+- `EP_POSTGRES_DATABASE` - Nombre de la base de datos
+- `EP_SECURITY_CORS_ALLOWED_ORIGINS` - Orígenes permitidos para CORS (separados por comas), ej: `https://episcopio.mx,https://www.episcopio.mx`
+
+**Opcionales:**
+- `EP_API_URL` - URL base para el API (default: `/api` para uso con reverse proxy)
+- `EP_REDIS_URL` - URL de Redis para caché
+- `EP_POSTGRES_PORT` - Puerto de PostgreSQL (default: 5432)
 
 ## 📊 Uso
 
