@@ -10,7 +10,7 @@ echo "=========================================="
 
 # Save current directory
 REPO_DIR=$(pwd)
-TEST_DIR="/tmp/episcopio-test-$$"
+TEST_DIR=$(mktemp -d)
 
 # Clean up on exit
 cleanup() {

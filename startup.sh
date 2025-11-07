@@ -102,10 +102,21 @@ gunicorn main:app \
 cd ..
 
 # Get the PID of the gunicorn master process
-sleep 2
-API_PID=$(pgrep -f "gunicorn main:app" | head -1)
+# Wait for gunicorn to start with retry logic
+MAX_RETRIES=10
+RETRY_COUNT=0
+API_PID=""
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    sleep 1
+    API_PID=$(pgrep -f "gunicorn main:app" | head -1)
+    if [ -n "$API_PID" ]; then
+        break
+    fi
+    RETRY_COUNT=$((RETRY_COUNT+1))
+done
+
 if [ -z "$API_PID" ]; then
-    echo "ERROR: Failed to get API process PID"
+    echo "ERROR: Failed to get API process PID after ${MAX_RETRIES} retries"
     echo "=== API Error Log ==="
     cat /tmp/api-error.log 2>/dev/null || echo "No error log found"
     exit 1
@@ -187,10 +198,21 @@ gunicorn app:app.server \
 cd ..
 
 # Get the PID of the gunicorn master process
-sleep 2
-DASHBOARD_PID=$(pgrep -f "gunicorn app:app.server" | head -1)
+# Wait for gunicorn to start with retry logic
+MAX_RETRIES=10
+RETRY_COUNT=0
+DASHBOARD_PID=""
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    sleep 1
+    DASHBOARD_PID=$(pgrep -f "gunicorn app:app.server" | head -1)
+    if [ -n "$DASHBOARD_PID" ]; then
+        break
+    fi
+    RETRY_COUNT=$((RETRY_COUNT+1))
+done
+
 if [ -z "$DASHBOARD_PID" ]; then
-    echo "ERROR: Failed to get Dashboard process PID"
+    echo "ERROR: Failed to get Dashboard process PID after ${MAX_RETRIES} retries"
     echo "=== Dashboard Error Log ==="
     cat /tmp/dashboard-error.log 2>/dev/null || echo "No error log found"
     exit 1
