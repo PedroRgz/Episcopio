@@ -6,10 +6,22 @@ from typing import Optional, Dict, Any
 from .sample_data_loader import sample_data_loader
 
 
-# EP_API_URL configuration:
-# - Production with reverse proxy: /api (default)
-# - Same host without proxy (startup.sh, run_local.sh): http://localhost:8000 (set by those scripts)
-# - Separate API domain: https://api.example.com (set via environment variable)
+# EP_API_URL configuration by deployment scenario:
+#
+# 1. Azure Web Apps (startup.sh) or Local dev (run_local.sh):
+#    - Value: http://localhost:8000 (set by startup scripts, overrides default)
+#    - Both services in same container, communicate via localhost
+#
+# 2. Azure VM with reverse proxy (nginx):
+#    - Value: /api (fallback code default, for reverse proxy scenarios)
+#    - Nginx routes /api/* to port 8000
+#
+# 3. Separate API domain:
+#    - Value: https://api.example.com (set via environment variable)
+#    - Services on completely different hosts
+#
+# Note: The /api default is used when running dashboard standalone with reverse proxy.
+# In standard deployments, startup scripts always set EP_API_URL=http://localhost:8000
 BASE_URL = os.getenv("EP_API_URL", "/api")
 TIMEOUT = 30
 
