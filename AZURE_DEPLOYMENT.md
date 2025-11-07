@@ -4,40 +4,63 @@ Esta guía describe cómo desplegar Episcopio en Azure usando Azure Web Apps o u
 
 ## Arquitectura de Despliegue
 
-Episcopio consta de dos servicios principales:
-- **API** (FastAPI): Servicio REST que provee datos epidemiológicos (puerto 8000)
-- **Dashboard** (Dash/Plotly): Interfaz web interactiva (puerto 8050)
+Episcopio utiliza una **arquitectura unificada** donde ambos servicios (API y Dashboard) corren en un solo proceso:
 
-### Estrategias de Despliegue
+- **Proceso unificado**: API (FastAPI) + Dashboard (Dash/Plotly) en un solo proceso Python
+- **Puerto único**: Todo el tráfico en puerto 8000
+- **Dashboard**: Accesible en la ruta raíz `/`
+- **API REST**: Disponible en `/api/v1/*`
+- **Comunicación**: El Dashboard usa rutas relativas (`/api/v1`) para llamar a la API
 
-**Opción A: Azure Web Apps - Servicios en el mismo contenedor (Recomendado para simplicidad)**
-- Ambos servicios (API y Dashboard) corren en el mismo contenedor
-- Solo el Dashboard (puerto 8050) está expuesto públicamente
-- La API (puerto 8000) solo es accesible internamente via localhost
-- Variables de entorno: `EP_API_URL=http://localhost:8000` y `EP_SECURITY_CORS_ALLOWED_ORIGINS=https://your-domain.com`
-- **Ventajas**: Configuración más simple, menor costo, ideal para MVP
-- **Desventajas**: API no accesible externamente, escalabilidad limitada
+### Ventajas de la Arquitectura Unificada
 
-**Opción B: Azure VM con reverse proxy (Recomendado para producción)**
+- ✅ **Simplicidad**: Un solo proceso, un solo puerto, menor complejidad operacional
+- ✅ **Menor latencia**: Sin overhead de red entre API y Dashboard (mismo proceso)
+- ✅ **Menos recursos**: Menor consumo de memoria y CPU
+- ✅ **Despliegue simple**: No requiere configurar múltiples servicios o ports
+- ✅ **Health checks simples**: Azure solo necesita monitorear un endpoint
+- ✅ **Ideal para Azure App Service**: Alineado con el modelo de un solo puerto de Azure
+
+### Diagrama de Arquitectura
+
+```
+┌─────────────────────────────────────┐
+│   Azure App Service / VM            │
+│   ┌─────────────────────────────┐   │
+│   │  Unified Process (Port 8000)│   │
+│   │  ┌──────────────────────┐   │   │
+│   │  │  FastAPI             │   │   │
+│   │  │  - Routes /api/v1/*  │   │   │
+│   │  └──────────────────────┘   │   │
+│   │  ┌──────────────────────┐   │   │
+│   │  │  Dash (mounted at /) │   │   │
+│   │  │  - Dashboard UI      │   │   │
+│   │  └──────────────────────┘   │   │
+│   └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+         ↓
+    Users access via:
+    - Dashboard: https://app.com/
+    - API: https://app.com/api/v1/*
+```
+
+### Estrategias de Despliegue Alternativas (Legacy)
+
+**Nota**: Estas opciones están disponibles para casos especiales, pero se recomienda la arquitectura unificada.
+
+**Opción B: Azure VM con reverse proxy**
 - Servicios detrás de Nginx que actúa como reverse proxy
-- Un solo dominio público expone ambos servicios
-- Nginx enruta:
-  - `/*` → Dashboard (puerto 8050)
-  - `/api/*` → API (puerto 8000)
-- Variables de entorno: `EP_API_URL=/api` y `EP_SECURITY_CORS_ALLOWED_ORIGINS=https://your-domain.com`
-- **Ventajas**: API accesible externamente, mejor control, más escalable
-- **Desventajas**: Requiere más configuración
+- Requiere configuración adicional de nginx
+- Solo usar si necesitas routing avanzado o servicios separados
 
 **Opción C: Servicios en dominios separados**
-- API en `https://api.episcopio.mx`
-- Dashboard en `https://episcopio.mx`
-- Variables de entorno: `EP_API_URL=https://api.episcopio.mx` y `EP_SECURITY_CORS_ALLOWED_ORIGINS=https://episcopio.mx`
-- **Ventajas**: Máxima flexibilidad, escalabilidad independiente
-- **Desventajas**: Mayor costo, más complejo de mantener
+- API en `https://api.episcopio.mx`, Dashboard en `https://episcopio.mx`
+- Mayor costo y complejidad
+- Solo usar si necesitas escalabilidad independiente de servicios
 
-## Opción A: Azure Web Apps (Recomendado para MVP)
+## Opción A: Azure Web Apps (Recomendado)
 
-Azure Web Apps es la forma más sencilla de desplegar aplicaciones Python en Azure sin preocuparse por la infraestructura. En esta configuración, ambos servicios (API y Dashboard) corren en el mismo contenedor y se comunican internamente via localhost.
+Azure Web Apps es la forma más sencilla de desplegar aplicaciones Python en Azure sin preocuparse por la infraestructura. La arquitectura unificada de Episcopio es ideal para Azure Web Apps.
 
 ### Prerrequisitos
 
@@ -134,19 +157,15 @@ az webapp config appsettings set \
     EP_POSTGRES_PASSWORD=<CONTRASEÑA_SEGURA> \
     EP_POSTGRES_DATABASE=episcopio \
     EP_POSTGRES_PORT=5432 \
-    EP_API_URL=http://localhost:8000 \
-    EP_SECURITY_CORS_ALLOWED_ORIGINS="https://${APP_DOMAIN},https://www.${APP_DOMAIN}" \
-    WEBSITES_PORT=8050
+    EP_API_URL=/api/v1 \
+    EP_SECURITY_CORS_ALLOWED_ORIGINS="https://${APP_DOMAIN},https://www.${APP_DOMAIN}"
 ```
 
 **Notas importantes sobre variables de entorno:**
 
-- `EP_API_URL`: Configuración según escenario de despliegue:
-  - **Azure Web Apps**: Use `http://localhost:8000`. Ambos servicios (API y Dashboard) corren en el mismo contenedor y se comunican internamente via localhost.
-  - **Azure VM con reverse proxy**: Use `/api` (ruta relativa). Requiere nginx o Azure Application Gateway que enrute las peticiones `/api/*` al puerto 8000.
-  - **Servicios en dominios separados**: Use URL completa (ej: `https://api.episcopio.mx`) cuando los servicios estén en hosts diferentes.
+- `EP_API_URL`: Para la arquitectura unificada, use `/api/v1` (ruta relativa). El Dashboard y la API están en el mismo proceso y usan rutas relativas para comunicarse.
 - `EP_SECURITY_CORS_ALLOWED_ORIGINS`: Lista separada por comas de orígenes permitidos. Incluya todos los dominios desde donde se accederá a la aplicación (con y sin www si aplica).
-- `WEBSITES_PORT`: Puerto que Azure expondrá públicamente (8050 para Dashboard). La API en puerto 8000 NO está expuesta externamente, solo accesible internamente via localhost.
+- **WEBSITES_PORT ya no es necesario**: Azure detecta automáticamente el puerto 8000 del proceso unificado.
 
 Si usa un dominio personalizado (ej: `episcopio.mx`), actualice la variable CORS:
 ```bash
@@ -201,11 +220,15 @@ az webapp log tail --name episcopio-app --resource-group episcopio-rg
 
 La aplicación estará disponible en: `https://episcopio-app.azurewebsites.net`
 
+- **Dashboard**: `https://episcopio-app.azurewebsites.net/`
+- **API Health**: `https://episcopio-app.azurewebsites.net/api/v1/health`
+- **API Docs**: `https://episcopio-app.azurewebsites.net/docs`
+
 ---
 
-## Opción B: Máquina Virtual en Azure con Nginx (Reverse Proxy)
+## Opción B: Máquina Virtual en Azure (Despliegue Directo)
 
-Si prefieres más control sobre el entorno y quieres exponer la API externamente, puedes desplegar en una VM con Nginx como reverse proxy. Esta configuración permite que ambos servicios sean accesibles desde el mismo dominio público.
+**Nota**: Con la arquitectura unificada, ya no necesitas Nginx para enrutar entre servicios. Simplemente despliega el proceso unificado en la VM.
 
 ### Paso 1: Crear una VM
 
@@ -219,10 +242,9 @@ az vm create \
   --admin-username azureuser \
   --generate-ssh-keys
 
-# Abrir puertos para HTTP y HTTPS
+# Abrir puerto para HTTP (o 443 para HTTPS con certbot)
 az vm open-port --port 80 --resource-group episcopio-rg --name episcopio-vm
-az vm open-port --port 443 --resource-group episcopio-rg --name episcopio-vm
-az vm open-port --port 8050 --resource-group episcopio-rg --name episcopio-vm --priority 1001
+az vm open-port --port 443 --resource-group episcopio-rg --name episcopio-vm --priority 1001
 ```
 
 ### Paso 2: Conectarse a la VM
@@ -302,7 +324,7 @@ EP_POSTGRES_PASSWORD=changeme
 EP_POSTGRES_DATABASE=episcopio
 EP_POSTGRES_PORT=5432
 EP_REDIS_URL=redis://localhost:6379/0
-EP_API_URL=/api
+EP_API_URL=/api/v1
 EP_SECURITY_CORS_ALLOWED_ORIGINS=https://${PUBLIC_DOMAIN},http://${PUBLIC_DOMAIN}
 EOF
 
@@ -310,91 +332,64 @@ EOF
 export $(cat .env | xargs)
 ```
 
-**Nota:** Con configuración de reverse proxy (nginx), use `EP_API_URL=/api` para que el Dashboard use rutas relativas. El nginx se encargará de enrutar `/api/*` al servicio API en puerto 8000.
+**Nota:** Con la arquitectura unificada, use `EP_API_URL=/api/v1` para comunicación interna en el mismo proceso.
 
-### Paso 7: Configurar servicios systemd
+### Paso 7: Configurar servicio systemd
 
 ```bash
-# Crear servicio para API
-sudo tee /etc/systemd/system/episcopio-api.service > /dev/null << EOF
+# Crear servicio para la aplicación unificada
+sudo tee /etc/systemd/system/episcopio.service > /dev/null << EOF
 [Unit]
-Description=Episcopio API Service
-After=network.target postgresql.service
+Description=Episcopio Unified Application (API + Dashboard)
+After=network.target postgresql.service redis.service
 
 [Service]
 Type=simple
 User=azureuser
-WorkingDirectory=/home/azureuser/Episcopio/api
+WorkingDirectory=/home/azureuser/Episcopio
 Environment="PATH=/home/azureuser/Episcopio/venv/bin"
 EnvironmentFile=/home/azureuser/Episcopio/.env
-ExecStart=/home/azureuser/Episcopio/venv/bin/python main.py
+ExecStart=/home/azureuser/Episcopio/venv/bin/gunicorn api.unified:app \
+  --workers 2 \
+  --worker-class uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:8000 \
+  --access-logfile /var/log/episcopio-access.log \
+  --error-logfile /var/log/episcopio-error.log \
+  --log-level info
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Crear servicio para Dashboard
-sudo tee /etc/systemd/system/episcopio-dashboard.service > /dev/null << EOF
-[Unit]
-Description=Episcopio Dashboard Service
-After=network.target episcopio-api.service
-
-[Service]
-Type=simple
-User=azureuser
-WorkingDirectory=/home/azureuser/Episcopio/dashboard
-Environment="PATH=/home/azureuser/Episcopio/venv/bin"
-EnvironmentFile=/home/azureuser/Episcopio/.env
-ExecStart=/home/azureuser/Episcopio/venv/bin/python app.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Habilitar e iniciar servicios
+# Habilitar e iniciar servicio
 sudo systemctl daemon-reload
-sudo systemctl enable episcopio-api
-sudo systemctl enable episcopio-dashboard
-sudo systemctl start episcopio-api
-sudo systemctl start episcopio-dashboard
+sudo systemctl enable episcopio
+sudo systemctl start episcopio
 ```
 
-### Paso 8: Configurar Nginx como proxy reverso
+### Paso 8: (Opcional) Configurar Nginx como proxy reverso para HTTPS
 
-El reverse proxy permite exponer una sola interfaz pública (puerto 80/443) mientras ambos servicios (API y Dashboard) corren en puertos internos separados.
-
-**Arquitectura de puertos:**
-- Puerto 8000: API (interno, no expuesto directamente)
-- Puerto 8050: Dashboard (interno, no expuesto directamente)
-- Puerto 80: Nginx (expuesto públicamente)
-- Puerto 443: Nginx con SSL (expuesto públicamente)
+Si quieres usar HTTPS con Let's Encrypt, puedes configurar Nginx como proxy reverso:
 
 ```bash
-# Configurar Nginx
+# Instalar Nginx
+sudo apt install -y nginx
+
+# Configurar Nginx para proxy pass al puerto 8000
 sudo tee /etc/nginx/sites-available/episcopio > /dev/null << EOF
 server {
     listen 80;
     server_name _;
 
-    # Dashboard - ruta raíz
+    # Proxy pass todo el tráfico al proceso unificado en puerto 8000
     location / {
-        proxy_pass http://localhost:8050;
+        proxy_pass http://localhost:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host \$host;
         proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    # API - prefijo /api
-    location /api {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
@@ -422,11 +417,26 @@ sudo systemctl status episcopio-api
 sudo systemctl status episcopio-dashboard
 
 # Ver logs
-sudo journalctl -u episcopio-api -f
-sudo journalctl -u episcopio-dashboard -f
+sudo systemctl restart nginx
 ```
 
-La aplicación estará disponible en: `http://<IP_PUBLICA_VM>`
+### Paso 9: Verificar el despliegue
+
+```bash
+# Verificar servicio
+sudo systemctl status episcopio
+
+# Ver logs
+sudo journalctl -u episcopio -f
+```
+
+La aplicación estará disponible en: `http://<IP_PUBLICA_VM>:8000`
+
+Si configuraste Nginx, accede vía: `http://<IP_PUBLICA_VM>`
+
+- **Dashboard**: `http://<IP>/`
+- **API Health**: `http://<IP>/api/v1/health`
+- **API Docs**: `http://<IP>/docs`
 
 ---
 
@@ -488,11 +498,14 @@ az webapp log tail \
 ### VM
 
 ```bash
-# Ver logs de servicios
-sudo journalctl -u episcopio-api -f
-sudo journalctl -u episcopio-dashboard -f
+# Ver logs del servicio unificado
+sudo journalctl -u episcopio -f
 
-# Ver logs de Nginx
+# Ver logs de aplicación
+sudo tail -f /var/log/episcopio-access.log
+sudo tail -f /var/log/episcopio-error.log
+
+# Ver logs de Nginx (si configurado)
 sudo tail -f /var/log/nginx/access.log
 sudo tail -f /var/log/nginx/error.log
 ```
