@@ -19,7 +19,7 @@ This document summarizes the architectural changes made to unify the Episcopio A
 
 **After**: Unified architecture with a single process:
 - Combined application on port 8000
-- Dashboard mounted at `/dashboard`
+- Dashboard mounted at `/` (root)
 - API available at `/api/v1/*`
 - Single process, single port, simpler deployment
 - Relative URL communication (no network overhead)
@@ -147,7 +147,7 @@ Updated `dashboard/services/api_client.py`:
    - Verify both dashboard and API work on port 8000
 
 5. **Update Client Applications**:
-   - Dashboard URL: `https://your-app/dashboard` (was: `:8050`)
+   - Dashboard URL: `https://your-app/` (was: `:8050`)
    - API URL: `https://your-app/api/v1/` (unchanged)
 
 ## Testing
