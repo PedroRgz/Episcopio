@@ -1,591 +1,751 @@
-"""Episcopio Dashboard - Dash/Plotly application."""
+"""Episcopio Dashboard — Dash/Plotly application.
+
+The interaction model is "paste your keys and it runs":
+
+1. On first load the browser is issued an opaque session id (and *only* that —
+   credentials never leave the server once submitted).
+2. The connect panel lists every provider from the registry. Saving stores the
+   keys in the server-side vault and immediately starts a pipeline run.
+3. A poller shows live per-source progress and swaps the charts over to the
+   session's own data the moment the run produces any.
+
+Until a run succeeds the dashboard renders bundled sample data, clearly badged,
+so the app is explorable with no credentials at all.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List
+
 import dash
-from dash import dcc, html, Input, Output, State
 import plotly.graph_objs as go
-import plotly.express as px
-from datetime import datetime, timedelta
-import pandas as pd
+from dash import ALL, Input, Output, State, dcc, html, no_update
 
 from dashboard.services.api_client import api_client
+from ingesta.providers import PROVIDERS
+
+logger = logging.getLogger(__name__)
+
+ENTIDADES = [
+    {"label": "Nacional", "value": "00"},
+    {"label": "Yucatán", "value": "31"},
+    {"label": "Quintana Roo", "value": "23"},
+    {"label": "Campeche", "value": "04"},
+    {"label": "Ciudad de México", "value": "09"},
+    {"label": "Nuevo León", "value": "19"},
+]
+
+MORBILIDADES = [
+    {"label": "COVID-19", "value": "1"},
+    {"label": "Dengue", "value": "2"},
+    {"label": "Influenza", "value": "3"},
+]
+
+# Plotly styling that reads correctly in both light and dark themes: the paper
+# is transparent so the card background shows through, and the grid is a
+# low-alpha neutral rather than a fixed grey.
+CHART_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(family="-apple-system, BlinkMacSystemFont, Segoe UI, Inter, sans-serif", size=12, color="#8b93a1"),
+    margin=dict(l=48, r=24, t=16, b=40),
+    hovermode="x unified",
+    xaxis=dict(gridcolor="rgba(128,128,128,0.14)", zeroline=False, showline=False),
+    yaxis=dict(gridcolor="rgba(128,128,128,0.14)", zeroline=False, showline=False),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+)
+
+ACCENT = "#1f6feb"
+POSITIVE = "#0f7b52"
+DANGER = "#b4232b"
+
+STATUS_BADGE = {
+    "ok": ("ep-badge ep-badge--live", "Conectado"),
+    "success": ("ep-badge ep-badge--live", "Listo"),
+    "running": ("ep-badge ep-badge--running", "En progreso"),
+    "pending": ("ep-badge ep-badge--neutral", "En espera"),
+    "skipped": ("ep-badge ep-badge--neutral", "Omitido"),
+    "partial": ("ep-badge ep-badge--sample", "Parcial"),
+    "error": ("ep-badge ep-badge--error", "Error"),
+    "unreachable": ("ep-badge ep-badge--error", "Sin conexión"),
+    "idle": ("ep-badge ep-badge--neutral", "Sin ejecutar"),
+}
+
+TERMINAL_RUN_STATES = {"success", "partial", "error"}
 
 
-def build_dashboard_app(requests_pathname_prefix="/"):
-    """Build and configure the Dash application.
-    
-    Args:
-        requests_pathname_prefix: URL prefix for the dashboard. Default is "/" for root mounting.
-        
-    Returns:
-        Configured Dash application instance.
+# ---------------------------------------------------------------------------
+# Presentation helpers
+# ---------------------------------------------------------------------------
+
+def _fmt_int(value: Any) -> str:
+    try:
+        return f"{int(value):,}".replace(",", " ")
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _delta_node(value: Any, label: str = "vs. periodo anterior") -> html.Span:
+    """Render a percentage change with direction-appropriate colour.
+
+    For epidemiological counts a rise is bad news, so "up" is styled with the
+    danger colour rather than the usual green-for-growth convention.
     """
-    # Initialize Dash app
+    try:
+        pct = float(value)
+    except (TypeError, ValueError):
+        return html.Span("Sin comparativo", className="ep-kpi-delta ep-kpi-delta--flat")
+
+    if pct > 0:
+        cls, arrow = "ep-kpi-delta ep-kpi-delta--up", "▲"
+    elif pct < 0:
+        cls, arrow = "ep-kpi-delta ep-kpi-delta--down", "▼"
+    else:
+        cls, arrow = "ep-kpi-delta ep-kpi-delta--flat", "■"
+    return html.Span(f"{arrow} {abs(pct):g}% {label}", className=cls)
+
+
+def _badge(status: str) -> html.Span:
+    cls, text = STATUS_BADGE.get(status, STATUS_BADGE["idle"])
+    dot_cls = "ep-dot ep-dot--pulse" if status == "running" else "ep-dot"
+    return html.Span([html.Span(className=dot_cls), text], className=cls)
+
+
+def _kpi_card(label: str, value: Any, delta: Any) -> html.Div:
+    return html.Div(
+        [
+            html.Span(label, className="ep-kpi-label"),
+            html.Span(_fmt_int(value), className="ep-kpi-value"),
+            _delta_node(delta),
+        ],
+        className="ep-card ep-kpi",
+    )
+
+
+def _empty_figure(message: str) -> go.Figure:
+    """A chart placeholder that says *why* it is empty."""
+    fig = go.Figure()
+    fig.update_layout(
+        **{**CHART_LAYOUT, "xaxis": dict(visible=False), "yaxis": dict(visible=False)},
+        annotations=[
+            dict(
+                text=message,
+                showarrow=False,
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                font=dict(size=13, color="#8b93a1"),
+            )
+        ],
+        height=280,
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Layout fragments
+# ---------------------------------------------------------------------------
+
+def _provider_block(provider) -> html.Div:
+    """One provider's credential inputs inside the connect panel."""
+    fields = [
+        html.Div(
+            [
+                html.Label(
+                    field.label + ("" if field.required else " (opcional)"),
+                    className="ep-label",
+                    htmlFor=f"cred-{provider.id}-{field.name}",
+                ),
+                dcc.Input(
+                    id={"type": "cred-input", "provider": provider.id, "field": field.name},
+                    type="password" if field.secret else "text",
+                    placeholder=field.placeholder,
+                    className="ep-input",
+                    autoComplete="off",
+                    persistence=False,
+                    debounce=True,
+                ),
+            ],
+            className="ep-field",
+        )
+        for field in provider.fields
+    ]
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Div(provider.label, className="ep-provider-name"),
+                            html.Div(provider.description, className="ep-provider-desc"),
+                        ]
+                    ),
+                    html.A("Documentación ↗", href=provider.doc_url, target="_blank", rel="noopener noreferrer",
+                           className="ep-hint"),
+                ],
+                className="ep-provider-head",
+            ),
+            html.Div(fields, className="ep-provider-fields"),
+        ],
+        className="ep-provider",
+    )
+
+
+def _connect_panel() -> html.Div:
+    credentialed = [p for p in PROVIDERS if p.needs_credentials]
+    public = [p for p in PROVIDERS if not p.needs_credentials]
+
+    return html.Div(
+        html.Div(
+            [
+                html.Div(
+                    [
+                        html.Div("Conecta tus fuentes", className="ep-modal-title"),
+                        html.P(
+                            "Ingresa las llaves de las plataformas que quieras monitorear. "
+                            "Al guardar, Episcopio valida cada credencial y ejecuta la ingesta "
+                            "automáticamente. Puedes explorar con datos de muestra sin conectar nada.",
+                            className="ep-modal-lede",
+                        ),
+                    ],
+                    className="ep-modal-head",
+                ),
+                html.Div(
+                    [
+                        html.Span("🔒"),
+                        html.Span(
+                            [
+                                html.Strong("Tus llaves no salen del servidor. "),
+                                "Se guardan solo en memoria, ligadas a esta sesión, y se borran "
+                                "al expirar o al cerrar sesión. El navegador únicamente conserva "
+                                "un identificador de sesión, nunca las credenciales.",
+                            ]
+                        ),
+                    ],
+                    className="ep-note",
+                    style={"marginBottom": "16px"},
+                ),
+                html.Div(
+                    [
+                        html.Span("Fuentes públicas activas sin credenciales: "),
+                        html.Strong(", ".join(p.label for p in public) or "ninguna"),
+                    ],
+                    className="ep-hint",
+                    style={"marginBottom": "8px"},
+                ),
+                html.Div([_provider_block(p) for p in credentialed]),
+                html.Div(
+                    [
+                        html.Button("Explorar con datos de muestra", id="cancel-keys",
+                                    n_clicks=0, className="ep-btn ep-btn--ghost"),
+                        html.Button("Guardar y ejecutar", id="save-keys",
+                                    n_clicks=0, className="ep-btn ep-btn--primary"),
+                    ],
+                    className="ep-modal-foot",
+                ),
+            ],
+            className="ep-modal",
+        ),
+        id="connect-backdrop",
+        className="ep-modal-backdrop",
+    )
+
+
+def _header() -> html.Div:
+    return html.Header(
+        html.Div(
+            [
+                html.Div(
+                    [
+                        html.Div("E", className="ep-mark"),
+                        html.Div(
+                            [
+                                html.Span("Episcopio", className="ep-brand-name"),
+                                html.Span("Pulso epidemiológico de México", className="ep-brand-tagline"),
+                            ],
+                            className="ep-brand-text",
+                        ),
+                    ],
+                    className="ep-brand",
+                ),
+                html.Div(
+                    [
+                        html.Div(_badge("idle"), id="data-mode-badge"),
+                        html.Button("Ejecutar ahora", id="run-now", n_clicks=0, className="ep-btn"),
+                        html.Button("Fuentes", id="open-connect", n_clicks=0,
+                                    className="ep-btn ep-btn--primary"),
+                    ],
+                    className="ep-header-actions",
+                ),
+            ],
+            className="ep-header-inner",
+        ),
+        className="ep-header",
+    )
+
+
+def _filters() -> html.Div:
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Label("Entidad federativa", className="ep-label", htmlFor="entidad-dropdown"),
+                    dcc.Dropdown(id="entidad-dropdown", options=ENTIDADES, value="31", clearable=False),
+                ],
+                className="ep-field",
+            ),
+            html.Div(
+                [
+                    html.Label("Morbilidad", className="ep-label", htmlFor="morbilidad-dropdown"),
+                    dcc.Dropdown(id="morbilidad-dropdown", options=MORBILIDADES, value="1", clearable=False),
+                ],
+                className="ep-field",
+            ),
+            html.Div(
+                html.Button("Actualizar vista", id="update-button", n_clicks=0,
+                            className="ep-btn ep-btn--block"),
+                className="ep-field",
+            ),
+        ],
+        className="ep-card ep-filters",
+    )
+
+
+def _build_layout() -> html.Div:
+    return html.Div(
+        [
+            dcc.Location(id="url"),
+            # Only an opaque session id lives in the browser — never a credential.
+            dcc.Store(id="session-store", storage_type="session"),
+            dcc.Store(id="run-store", data={}),
+            dcc.Store(id="data-version", data=0),
+            dcc.Interval(id="run-poll", interval=1500, disabled=True),
+            _connect_panel(),
+            _header(),
+            html.Main(
+                [
+                    html.Section(
+                        [
+                            html.Div(
+                                [
+                                    html.Span("Estado de la ingesta", className="ep-section-title"),
+                                    html.Span("", id="run-summary", className="ep-card-sub"),
+                                ],
+                                className="ep-section-head",
+                            ),
+                            html.Div(id="run-panel", className="ep-card"),
+                        ],
+                        className="ep-section",
+                    ),
+                    html.Section(_filters(), className="ep-section"),
+                    html.Section(
+                        html.Div(id="kpi-cards", className="ep-kpi-grid"),
+                        className="ep-section",
+                    ),
+                    html.Section(
+                        [
+                            html.Div(
+                                html.Span("Series", className="ep-section-title"),
+                                className="ep-section-head",
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.H2("Casos confirmados"),
+                                                    html.Span("Serie oficial diaria", className="ep-card-sub"),
+                                                ],
+                                                className="ep-card-head",
+                                            ),
+                                            dcc.Graph(
+                                                id="timeseries-chart",
+                                                config={"displaylogo": False, "responsive": True},
+                                            ),
+                                        ],
+                                        className="ep-card",
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.H2("Señal social"),
+                                                    html.Span("Menciones y sentimiento", className="ep-card-sub"),
+                                                ],
+                                                className="ep-card-head",
+                                            ),
+                                            dcc.Graph(
+                                                id="sentiment-chart",
+                                                config={"displaylogo": False, "responsive": True},
+                                            ),
+                                        ],
+                                        className="ep-card",
+                                    ),
+                                ],
+                                className="ep-chart-grid",
+                            ),
+                        ],
+                        className="ep-section",
+                    ),
+                    html.Section(
+                        [
+                            html.Div(
+                                html.Span("Alertas activas", className="ep-section-title"),
+                                className="ep-section-head",
+                            ),
+                            html.Div(id="alerts-container", className="ep-card"),
+                        ],
+                        className="ep-section",
+                    ),
+                ],
+                className="ep-main",
+            ),
+            html.Footer(
+                [
+                    html.P("Episcopio · Monitoreo epidemiológico de México"),
+                    html.Div(
+                        [
+                            html.A("Documentación", href="https://github.com/PedroRgz/Episcopio",
+                                   target="_blank", rel="noopener noreferrer"),
+                            html.A("API", href="/api/v1/status"),
+                        ],
+                        className="ep-footer-links",
+                    ),
+                ],
+                className="ep-footer",
+            ),
+        ],
+        className="ep-shell",
+    )
+
+
+# ---------------------------------------------------------------------------
+# App factory
+# ---------------------------------------------------------------------------
+
+def build_dashboard_app(requests_pathname_prefix: str = "/") -> dash.Dash:
+    """Build and configure the Dash application.
+
+    Args:
+        requests_pathname_prefix: URL prefix the browser uses to reach Dash.
+
+    Returns:
+        A configured :class:`dash.Dash` instance.
+    """
     app = dash.Dash(
         __name__,
-        title="Episcopio - Monitoreo Epidemiológico",
+        title="Episcopio · Monitoreo epidemiológico",
+        update_title=None,
         suppress_callback_exceptions=True,
-        requests_pathname_prefix=requests_pathname_prefix
+        requests_pathname_prefix=requests_pathname_prefix,
+        meta_tags=[
+            {"name": "viewport", "content": "width=device-width, initial-scale=1"},
+            {"name": "color-scheme", "content": "light dark"},
+            {
+                "name": "description",
+                "content": "Monitoreo epidemiológico de México: KPIs oficiales, señal social y alertas.",
+            },
+        ],
     )
-    
-    # App layout
-    app.layout = html.Div([
-    # Store for API keys
-    dcc.Store(id='api-keys-store', data={}),
-    dcc.Store(id='use-sample-data-store', data=True),
-    
-    # Modal for API keys
-    html.Div([
-        html.Div([
-            html.Div([
-                html.H2("Configuración de API Keys", style={
-                    "color": "#2c3e50",
-                    "marginBottom": "10px"
-                }),
-                html.P(
-                    "Ingrese sus API keys para acceder a datos en tiempo real de las diferentes plataformas. "
-                    "Si prefiere explorar la aplicación con datos de muestra, haga clic en 'Cancelar'.",
-                    style={"color": "#7f8c8d", "marginBottom": "10px", "fontSize": "14px"}
-                ),
-                html.P([
-                    html.Strong("⚠️ Advertencia de Seguridad: "),
-                    "Las API keys se almacenan temporalmente en memoria durante esta sesión. "
-                    "Para uso en producción, implemente un sistema de gestión de secretos apropiado y encriptación de credenciales."
-                ], style={"color": "#e67e22", "marginBottom": "20px", "fontSize": "12px", "backgroundColor": "#fff3cd", "padding": "10px", "borderRadius": "4px", "border": "1px solid #ffc107"}),
-                
-                html.Div([
-                    html.Label("INEGI Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
-                    dcc.Input(
-                        id="api-key-inegi",
-                        type="password",
-                        placeholder="Ingrese su token de INEGI",
-                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
-                    )
-                ]),
-                
-                html.Div([
-                    html.Label("Twitter Bearer Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
-                    dcc.Input(
-                        id="api-key-twitter",
-                        type="password",
-                        placeholder="Ingrese su bearer token de Twitter",
-                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
-                    )
-                ]),
-                
-                html.Div([
-                    html.Label("Facebook Access Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
-                    dcc.Input(
-                        id="api-key-facebook",
-                        type="password",
-                        placeholder="Ingrese su access token de Facebook",
-                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
-                    )
-                ]),
-                
-                html.Div([
-                    html.Label("Instagram Access Token:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
-                    dcc.Input(
-                        id="api-key-instagram",
-                        type="password",
-                        placeholder="Ingrese su access token de Instagram",
-                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
-                    )
-                ]),
-                
-                html.Div([
-                    html.Label("Reddit Client ID:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
-                    dcc.Input(
-                        id="api-key-reddit",
-                        type="password",
-                        placeholder="Ingrese su client ID de Reddit",
-                        style={"width": "100%", "padding": "8px", "marginBottom": "15px", "borderRadius": "4px", "border": "1px solid #ddd"}
-                    )
-                ]),
-                
-                html.Div([
-                    html.Label("NewsAPI Key:", style={"fontWeight": "500", "marginBottom": "5px", "display": "block"}),
-                    dcc.Input(
-                        id="api-key-newsapi",
-                        type="password",
-                        placeholder="Ingrese su key de NewsAPI",
-                        style={"width": "100%", "padding": "8px", "marginBottom": "20px", "borderRadius": "4px", "border": "1px solid #ddd"}
-                    )
-                ]),
-                
-                html.Div([
-                    html.Button(
-                        "Guardar",
-                        id="save-api-keys",
-                        n_clicks=0,
-                        style={
-                            "backgroundColor": "#3498db",
-                            "color": "white",
-                            "border": "none",
-                            "padding": "10px 25px",
-                            "borderRadius": "5px",
-                            "cursor": "pointer",
-                            "marginRight": "10px",
-                            "fontWeight": "500"
-                        }
-                    ),
-                    html.Button(
-                        "Cancelar",
-                        id="cancel-api-keys",
-                        n_clicks=0,
-                        style={
-                            "backgroundColor": "#95a5a6",
-                            "color": "white",
-                            "border": "none",
-                            "padding": "10px 25px",
-                            "borderRadius": "5px",
-                            "cursor": "pointer",
-                            "fontWeight": "500"
-                        }
-                    )
-                ], style={"textAlign": "right"})
-            ], style={
-                "backgroundColor": "white",
-                "padding": "30px",
-                "borderRadius": "8px",
-                "boxShadow": "0 4px 6px rgba(0,0,0,0.1)",
-                "maxWidth": "600px",
-                "width": "90%",
-                "maxHeight": "90vh",
-                "overflowY": "auto"
-            })
-        ], style={
-            "position": "fixed",
-            "top": "0",
-            "left": "0",
-            "width": "100%",
-            "height": "100%",
-            "backgroundColor": "rgba(0,0,0,0.5)",
-            "display": "flex",
-            "justifyContent": "center",
-            "alignItems": "center",
-            "zIndex": "1000"
-        })
-    ], id="api-keys-modal", style={"display": "block"}),
-    
-    # Header
-    html.Div([
-        html.Div([
-            html.H1("Episcopio", style={"color": "#2c3e50", "margin": "0"}),
-            html.P(
-                "Tomando el pulso epidemiológico de México",
-                style={"color": "#7f8c8d", "margin": "5px 0"}
-            )
-        ], style={"flex": "1"}),
-        html.Div([
-            html.Div(
-                id="data-mode-indicator",
-                children="🎭 Modo: Datos de Muestra",
-                style={
-                    "backgroundColor": "#f39c12",
-                    "color": "white",
-                    "padding": "8px 15px",
-                    "borderRadius": "20px",
-                    "fontSize": "14px",
-                    "fontWeight": "500"
-                }
-            ),
-            html.Button(
-                "⚙️ Configurar API Keys",
-                id="open-api-modal",
-                n_clicks=0,
-                style={
-                    "backgroundColor": "#3498db",
-                    "color": "white",
-                    "border": "none",
-                    "padding": "8px 15px",
-                    "borderRadius": "5px",
-                    "cursor": "pointer",
-                    "marginLeft": "10px",
-                    "fontWeight": "500"
-                }
-            )
-        ], style={"display": "flex", "alignItems": "center"})
-    ], style={
-        "backgroundColor": "#ecf0f1",
-        "padding": "20px",
-        "borderBottom": "3px solid #3498db",
-        "display": "flex",
-        "justifyContent": "space-between",
-        "alignItems": "center"
-    }),
-    
-    # Main content
-    html.Div([
-        # Filters section
-        html.Div([
-            html.H3("Filtros"),
-            html.Div([
-                html.Label("Entidad Federativa:"),
-                dcc.Dropdown(
-                    id="entidad-dropdown",
-                    options=[
-                        {"label": "Yucatán", "value": "31"},
-                        {"label": "Quintana Roo", "value": "23"},
-                        {"label": "Campeche", "value": "04"},
-                        {"label": "Ciudad de México", "value": "09"},
-                        {"label": "Nuevo León", "value": "19"}
-                    ],
-                    value="31",
-                    style={"width": "100%", "marginBottom": "10px"}
-                )
-            ]),
-            html.Div([
-                html.Label("Morbilidad:"),
-                dcc.Dropdown(
-                    id="morbilidad-dropdown",
-                    options=[
-                        {"label": "COVID-19", "value": "1"},
-                        {"label": "Dengue", "value": "2"},
-                        {"label": "Influenza", "value": "3"}
-                    ],
-                    value="1",
-                    style={"width": "100%", "marginBottom": "10px"}
-                )
-            ]),
-            html.Button(
-                "Actualizar",
-                id="update-button",
-                n_clicks=0,
-                style={
-                    "backgroundColor": "#3498db",
-                    "color": "white",
-                    "border": "none",
-                    "padding": "10px 20px",
-                    "borderRadius": "5px",
-                    "cursor": "pointer",
-                    "width": "100%"
-                }
-            )
-        ], style={
-            "padding": "20px",
-            "backgroundColor": "#f8f9fa",
-            "borderRadius": "5px",
-            "marginBottom": "20px"
-        }),
-        
-        # KPI Cards
-        html.Div(id="kpi-cards", children=[
-            html.Div([
-                html.Div([
-                    html.H4("Casos Totales", style={"color": "#7f8c8d"}),
-                    html.H2("12,500", style={"color": "#3498db", "margin": "10px 0"}),
-                    html.P("↑ 8% vs semana anterior", style={"color": "#27ae60", "fontSize": "12px"})
-                ], style={
-                    "backgroundColor": "white",
-                    "padding": "20px",
-                    "borderRadius": "5px",
-                    "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-                    "flex": "1",
-                    "margin": "0 10px"
-                }),
-                html.Div([
-                    html.H4("Casos Activos", style={"color": "#7f8c8d"}),
-                    html.H2("450", style={"color": "#e67e22", "margin": "10px 0"}),
-                    html.P("↑ 12% vs semana anterior", style={"color": "#e74c3c", "fontSize": "12px"})
-                ], style={
-                    "backgroundColor": "white",
-                    "padding": "20px",
-                    "borderRadius": "5px",
-                    "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-                    "flex": "1",
-                    "margin": "0 10px"
-                }),
-                html.Div([
-                    html.H4("Defunciones", style={"color": "#7f8c8d"}),
-                    html.H2("350", style={"color": "#e74c3c", "margin": "10px 0"}),
-                    html.P("↑ 3% vs semana anterior", style={"color": "#e74c3c", "fontSize": "12px"})
-                ], style={
-                    "backgroundColor": "white",
-                    "padding": "20px",
-                    "borderRadius": "5px",
-                    "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-                    "flex": "1",
-                    "margin": "0 10px"
-                })
-            ], style={"display": "flex", "marginBottom": "20px"})
-        ]),
-        
-        # Charts section
-        html.Div([
-            # Time series chart
-            html.Div([
-                html.H3("Serie Temporal - Casos Confirmados"),
-                dcc.Graph(id="timeseries-chart")
-            ], style={
-                "backgroundColor": "white",
-                "padding": "20px",
-                "borderRadius": "5px",
-                "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-                "marginBottom": "20px"
-            }),
-            
-            # Sentiment chart
-            html.Div([
-                html.H3("Análisis de Sentimiento en Redes Sociales"),
-                dcc.Graph(id="sentiment-chart")
-            ], style={
-                "backgroundColor": "white",
-                "padding": "20px",
-                "borderRadius": "5px",
-                "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-                "marginBottom": "20px"
-            }),
-            
-            # Alerts section
-            html.Div([
-                html.H3("Alertas Activas"),
-                html.Div(id="alerts-container")
-            ], style={
-                "backgroundColor": "white",
-                "padding": "20px",
-                "borderRadius": "5px",
-                "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
-            })
-        ])
-    ], style={"padding": "20px", "maxWidth": "1200px", "margin": "0 auto"}),
-    
-    # Footer
-    html.Div([
-        html.P(
-            "© 2025 Episcopio - Monitoreo Epidemiológico | Datos actualizados cada 6 horas",
-            style={"textAlign": "center", "color": "#7f8c8d", "margin": "0"}
+
+    app.layout = _build_layout()
+
+    # -- session bootstrap ------------------------------------------------
+
+    @app.callback(
+        Output("session-store", "data"),
+        Input("url", "pathname"),
+        State("session-store", "data"),
+    )
+    def init_session(_pathname, current):
+        """Issue (or revive) this browser's session id on load."""
+        session_id = api_client.ensure_session(current)
+        return session_id if session_id != current else no_update
+
+    # -- connect panel ----------------------------------------------------
+
+    @app.callback(
+        Output("connect-backdrop", "style"),
+        Input("open-connect", "n_clicks"),
+        Input("cancel-keys", "n_clicks"),
+        Input("save-keys", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def toggle_connect(_open, _cancel, _save):
+        trigger = dash.callback_context.triggered_id
+        if trigger == "open-connect":
+            return {"display": "flex"}
+        return {"display": "none"}
+
+    # -- save credentials and auto-run ------------------------------------
+
+    @app.callback(
+        Output("run-store", "data"),
+        Output("run-poll", "disabled"),
+        Input("save-keys", "n_clicks"),
+        Input("run-now", "n_clicks"),
+        State({"type": "cred-input", "provider": ALL, "field": ALL}, "value"),
+        State({"type": "cred-input", "provider": ALL, "field": ALL}, "id"),
+        State("session-store", "data"),
+        prevent_initial_call=True,
+    )
+    def save_and_run(_save_clicks, _run_clicks, values, ids, session_id):
+        """Persist credentials server-side, then kick off a run.
+
+        Values arrive from the browser only at this moment; they are handed
+        straight to the vault and never echoed back into any component.
+        """
+        session_id = api_client.ensure_session(session_id)
+        if not session_id:
+            return {"status": "error", "summary": "No fue posible iniciar la sesión.", "steps": []}, True
+
+        if dash.callback_context.triggered_id == "save-keys":
+            grouped: Dict[str, Dict[str, str]] = {}
+            for value, ident in zip(values or [], ids or []):
+                if not isinstance(ident, dict):
+                    continue
+                grouped.setdefault(ident["provider"], {})[ident["field"]] = (value or "")
+            for provider_id, creds in grouped.items():
+                api_client.set_credentials(session_id, provider_id, creds)
+
+        run = api_client.start_pipeline(session_id)
+        if run is None:
+            return {"status": "error", "summary": "La sesión expiró. Recarga la página.", "steps": []}, True
+        return run, False
+
+    # -- poll run progress -------------------------------------------------
+
+    @app.callback(
+        Output("run-panel", "children"),
+        Output("run-summary", "children"),
+        Output("run-poll", "disabled", allow_duplicate=True),
+        Output("data-version", "data"),
+        Output("data-mode-badge", "children"),
+        Input("run-poll", "n_intervals"),
+        Input("run-store", "data"),
+        Input("session-store", "data"),
+        State("data-version", "data"),
+        prevent_initial_call="initial_duplicate",
+    )
+    def poll_run(_ticks, _run_seed, session_id, version):
+        """Render live run progress and flip the charts over when data lands."""
+        status_payload = api_client.pipeline_status(session_id)
+        status = status_payload.get("status", "idle")
+        steps: List[Dict[str, Any]] = status_payload.get("steps", [])
+
+        live = api_client.has_live_data(session_id)
+        badge_text = api_client.data_source_label(session_id)
+        mode_badge = html.Span(
+            [html.Span(className="ep-dot"), badge_text],
+            className="ep-badge ep-badge--live" if live else "ep-badge ep-badge--sample",
         )
-    ], style={
-        "backgroundColor": "#ecf0f1",
-        "padding": "15px",
-        "marginTop": "30px"
-    })
-    ])
-    
-    
-    # Callback to handle modal visibility
+
+        if status == "idle":
+            panel = html.Div(
+                [
+                    html.P("Aún no se ha ejecutado ninguna ingesta en esta sesión."),
+                    html.P(
+                        "Conecta al menos una fuente para traer datos en vivo, o continúa "
+                        "explorando con los datos de muestra.",
+                        className="ep-hint",
+                        style={"marginTop": "6px"},
+                    ),
+                ],
+                className="ep-empty",
+            )
+            return panel, "", True, no_update, mode_badge
+
+        done = sum(1 for s in steps if s.get("status") in {"success", "error", "skipped", "unreachable"})
+        pct = int((done / len(steps)) * 100) if steps else 0
+
+        rows = [
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span(step.get("label", step.get("key", "")), className="ep-row-title"),
+                            html.Span(step.get("message") or "—", className="ep-row-sub"),
+                        ],
+                        className="ep-row-main",
+                    ),
+                    html.Div(
+                        [
+                            html.Span(
+                                f"{_fmt_int(step.get('records', 0))} reg.",
+                                className="ep-hint",
+                                style={"marginRight": "10px"},
+                            )
+                            if step.get("records")
+                            else html.Span(),
+                            _badge(step.get("status", "pending")),
+                        ],
+                        style={"display": "flex", "alignItems": "center"},
+                    ),
+                ],
+                className="ep-row",
+            )
+            for step in steps
+        ]
+
+        panel = html.Div(
+            [
+                html.Div(
+                    html.Div(className="ep-progress-bar", style={"width": f"{pct}%"}),
+                    className="ep-progress",
+                    style={"marginBottom": "16px"},
+                ),
+                html.Div(rows, className="ep-list"),
+            ]
+        )
+
+        finished = status in TERMINAL_RUN_STATES
+        summary = html.Span([_badge(status), " ", status_payload.get("summary", "")])
+        # Bump the version only once the run settles, so the charts redraw
+        # exactly once rather than on every poll tick.
+        new_version = (version or 0) + 1 if finished else no_update
+
+        return panel, summary, finished, new_version, mode_badge
+
+    # -- data rendering ----------------------------------------------------
+
     @app.callback(
-        Output("api-keys-modal", "style"),
-        [Input("save-api-keys", "n_clicks"),
-         Input("cancel-api-keys", "n_clicks"),
-         Input("open-api-modal", "n_clicks")],
-        [State("api-keys-modal", "style")]
+        Output("kpi-cards", "children"),
+        Input("update-button", "n_clicks"),
+        Input("entidad-dropdown", "value"),
+        Input("data-version", "data"),
+        State("session-store", "data"),
     )
-    def toggle_modal(save_clicks, cancel_clicks, open_clicks, current_style):
-        """Toggle modal visibility."""
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            # Show modal on initial load
-            return {"display": "block"}
-        
-        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        
-        if button_id == "open-api-modal":
-            return {"display": "block"}
-        elif button_id in ["save-api-keys", "cancel-api-keys"]:
-            return {"display": "none"}
-        
-        return current_style or {"display": "block"}
-    
-    
-    # Callback to save API keys
-    @app.callback(
-        [Output("api-keys-store", "data"),
-         Output("use-sample-data-store", "data")],
-        [Input("save-api-keys", "n_clicks"),
-         Input("cancel-api-keys", "n_clicks")],
-        [State("api-key-inegi", "value"),
-         State("api-key-twitter", "value"),
-         State("api-key-facebook", "value"),
-         State("api-key-instagram", "value"),
-         State("api-key-reddit", "value"),
-         State("api-key-newsapi", "value")]
-    )
-    def save_api_keys(save_clicks, cancel_clicks, inegi, twitter, facebook, instagram, reddit, newsapi):
-        """Save API keys and determine data mode."""
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            return {}, True
-        
-        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        
-        if button_id == "cancel-api-keys":
-            # User wants to use sample data
-            api_client.set_sample_mode(True)
-            return {}, True
-        
-        if button_id == "save-api-keys":
-            # Collect provided keys
-            keys = {name: value for name, value in [
-                ("inegi", inegi),
-                ("twitter", twitter),
-                ("facebook", facebook),
-                ("instagram", instagram),
-                ("reddit", reddit),
-                ("newsapi", newsapi)
-            ] if value}
-            
-            # Update API client with keys
-            api_client.set_api_keys(keys)
-            
-            # If any keys provided, use real data mode
-            use_sample = len(keys) == 0
-            api_client.set_sample_mode(use_sample)
-            
-            return keys, use_sample
-        
-        return {}, True
-    
-    
-    # Callback to update data mode indicator
-    @app.callback(
-        Output("data-mode-indicator", "children"),
-        [Input("use-sample-data-store", "data"),
-         Input("api-keys-store", "data")]
-    )
-    def update_data_mode_indicator(use_sample, api_keys):
-        """Update the data mode indicator."""
-        if use_sample:
-            return "🎭 Modo: Datos de Muestra"
-        else:
-            platforms = list(api_keys.keys()) if api_keys else []
-            if platforms:
-                return f"✅ Modo: Datos Reales ({', '.join(platforms)})"
-            return "🎭 Modo: Datos de Muestra"
-    
-    
+    def render_kpis(_clicks, entidad, _version, session_id):
+        kpis = api_client.get_kpis(session_id, entidad or "31")
+        return [
+            _kpi_card("Casos totales", kpis.get("casos_totales"), kpis.get("variacion_casos")),
+            _kpi_card("Casos activos", kpis.get("casos_activos"), kpis.get("variacion_activos")),
+            _kpi_card("Defunciones", kpis.get("defunciones"), kpis.get("variacion_defunciones")),
+        ]
+
     @app.callback(
         Output("timeseries-chart", "figure"),
-        [Input("update-button", "n_clicks")],
-        [State("entidad-dropdown", "value")]
+        Input("update-button", "n_clicks"),
+        Input("entidad-dropdown", "value"),
+        Input("data-version", "data"),
+        State("session-store", "data"),
     )
-    def update_timeseries(n_clicks, entidad):
-        """Update time series chart."""
-        try:
-            data = api_client.get_timeseries(entidad=entidad)
-            serie_oficial = data.get("serie_oficial", [])
-            
-            df = pd.DataFrame(serie_oficial)
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df["fecha"],
-                y=df["casos"],
-                mode="lines+markers",
-                name="Casos confirmados",
-                line=dict(color="#3498db", width=3)
-            ))
-            
-            fig.update_layout(
-                xaxis_title="Fecha",
-                yaxis_title="Casos",
-                hovermode="x unified",
-                plot_bgcolor="#f8f9fa",
-                margin=dict(l=40, r=40, t=10, b=40)
+    def update_timeseries(_clicks, entidad, _version, session_id):
+        data = api_client.get_timeseries(session_id, entidad or "31")
+        serie = data.get("serie_oficial") or []
+        if not serie:
+            return _empty_figure("Sin datos para el periodo seleccionado.")
+
+        fechas = [p.get("fecha") for p in serie]
+        casos = [p.get("casos", 0) for p in serie]
+        defunciones = [p.get("defunciones", 0) for p in serie]
+
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=fechas, y=casos, name="Casos", mode="lines",
+                line=dict(color=ACCENT, width=2.5, shape="spline", smoothing=0.4),
+                fill="tozeroy", fillcolor="rgba(31,111,235,0.10)",
             )
-            
-            return fig
-        except Exception as e:
-            # Return empty figure on error
-            return go.Figure()
-    
-    
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=fechas, y=defunciones, name="Defunciones", mode="lines",
+                line=dict(color=DANGER, width=2, dash="dot"),
+            )
+        )
+        fig.update_layout(**CHART_LAYOUT, height=300)
+        return fig
+
     @app.callback(
         Output("sentiment-chart", "figure"),
-        [Input("update-button", "n_clicks")],
-        [State("entidad-dropdown", "value")]
+        Input("update-button", "n_clicks"),
+        Input("entidad-dropdown", "value"),
+        Input("data-version", "data"),
+        State("session-store", "data"),
     )
-    def update_sentiment(n_clicks, entidad):
-        """Update sentiment chart."""
-        try:
-            data = api_client.get_timeseries(entidad=entidad)
-            menciones = data.get("serie_social", {}).get("menciones", [])
-            
-            df = pd.DataFrame(menciones)
-            
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=df["fecha"],
-                y=df["conteo"],
-                name="Menciones",
-                marker_color="#2ecc71",
-                yaxis="y"
-            ))
-            
-            fig.add_trace(go.Scatter(
-                x=df["fecha"],
-                y=df["sentimiento"],
-                name="Sentimiento",
-                line=dict(color="#e74c3c", width=3),
-                yaxis="y2"
-            ))
-            
-            fig.update_layout(
-                xaxis_title="Fecha",
-                yaxis=dict(title="Menciones", side="left"),
-                yaxis2=dict(
-                    title="Sentimiento",
-                    overlaying="y",
-                    side="right",
-                    range=[-1, 1]
-                ),
-                hovermode="x unified",
-                plot_bgcolor="#f8f9fa",
-                margin=dict(l=40, r=40, t=10, b=40)
-            )
-            
-            return fig
-        except Exception as e:
-            return go.Figure()
-    
-    
+    def update_sentiment(_clicks, entidad, _version, session_id):
+        data = api_client.get_timeseries(session_id, entidad or "31")
+        menciones = (data.get("serie_social") or {}).get("menciones") or []
+        if not menciones:
+            return _empty_figure("Conecta una fuente social para ver esta serie.")
+
+        fechas = [m.get("fecha") for m in menciones]
+        conteos = [m.get("conteo", 0) for m in menciones]
+        sentimientos = [m.get("sentimiento", 0) for m in menciones]
+
+        fig = go.Figure()
+        fig.add_trace(
+            go.Bar(x=fechas, y=conteos, name="Menciones",
+                   marker_color="rgba(31,111,235,0.45)", marker_line_width=0)
+        )
+        fig.add_trace(
+            go.Scatter(x=fechas, y=sentimientos, name="Sentimiento", yaxis="y2",
+                       mode="lines", line=dict(color=POSITIVE, width=2.5))
+        )
+        layout = dict(CHART_LAYOUT)
+        layout["yaxis2"] = dict(
+            overlaying="y", side="right", range=[-1, 1], showgrid=False,
+            zeroline=True, zerolinecolor="rgba(128,128,128,0.3)",
+        )
+        fig.update_layout(**layout, height=300, bargap=0.35)
+        return fig
+
     @app.callback(
         Output("alerts-container", "children"),
-        [Input("update-button", "n_clicks")]
+        Input("update-button", "n_clicks"),
+        Input("data-version", "data"),
+        State("session-store", "data"),
     )
-    def update_alerts(n_clicks):
-        """Update alerts list."""
-        try:
-            data = api_client.get_alerts()
-            alertas = data.get("alertas", [])
-            
-            if not alertas:
-                return html.P("No hay alertas activas", style={"color": "#27ae60"})
-            
-            alerts_divs = []
-            for alerta in alertas:
-                alert_div = html.Div([
-                    html.H4(
-                        f"⚠️ {alerta.get('tipo', 'Alerta').replace('_', ' ').title()}",
-                        style={"color": "#e67e22", "margin": "0 0 10px 0"}
-                    ),
-                    html.P(
-                        f"Regla: {alerta.get('regla', 'N/A')} | Estado: {alerta.get('estado', 'N/A')}",
-                        style={"margin": "5px 0", "fontSize": "14px"}
-                    ),
-                    html.P(
-                        f"Creada: {alerta.get('created_at', 'N/A')}",
-                        style={"color": "#7f8c8d", "fontSize": "12px", "margin": "5px 0"}
-                    )
-                ], style={
-                    "padding": "15px",
-                    "backgroundColor": "#fff3cd",
-                    "borderLeft": "4px solid #e67e22",
-                    "borderRadius": "3px",
-                    "marginBottom": "10px"
-                })
-                alerts_divs.append(alert_div)
-            
-            return alerts_divs
-        except Exception as e:
-            return html.P("Error al cargar alertas", style={"color": "#e74c3c"})
-    
+    def update_alerts(_clicks, _version, session_id):
+        alertas = (api_client.get_alerts(session_id) or {}).get("alertas") or []
+        if not alertas:
+            return html.Div("No hay alertas activas.", className="ep-empty")
+
+        cards = []
+        for alerta in alertas:
+            tipo = str(alerta.get("tipo", "alerta")).replace("_", " ").capitalize()
+            evidencia = alerta.get("evidencia") or {}
+            detalle = alerta.get("mensaje") or ", ".join(
+                f"{k.replace('_', ' ')}: {v}" for k, v in evidencia.items()
+            )
+            cards.append(
+                html.Div(
+                    [
+                        html.Span("⚠", style={"color": "var(--warning)", "fontSize": "16px"}),
+                        html.Div(
+                            [
+                                html.Span(alerta.get("nombre") or tipo, className="ep-alert-title"),
+                                html.Span(detalle or "Sin detalle disponible.", className="ep-alert-meta"),
+                                html.Span(
+                                    f"Regla {alerta.get('regla', 'N/D')} · {alerta.get('created_at', '')}",
+                                    className="ep-alert-meta",
+                                ),
+                            ],
+                            className="ep-alert-body",
+                        ),
+                    ],
+                    className="ep-alert",
+                )
+            )
+        return cards
+
     return app
 
 
-# Create global app instance for standalone execution
+# Module-level instance for standalone execution (`python -m dashboard.app`).
 app = build_dashboard_app()
 server = app.server
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host="0.0.0.0", port=8050)
+    import os
+
+    # Debug mode enables the Werkzeug interactive debugger, which executes
+    # arbitrary code from the browser — it must never default to on, and it
+    # binds to loopback so it is not reachable from the network.
+    debug = os.getenv("EP_DEBUG", "").lower() in ("1", "true", "yes")
+    app.run(debug=debug, host=os.getenv("EP_DASH_HOST", "127.0.0.1"), port=8050)

@@ -3,6 +3,7 @@
 
 - id: a1
   nombre: "Incremento súbito oficial"
+  tipo: "incremento"
   descripcion: "Detecta incrementos súbitos en casos confirmados"
   serie: "casos"
   ventana_ref: 14  # días de referencia para promedio móvil
@@ -11,6 +12,7 @@
 
 - id: a2
   nombre: "Pico social + negativo"
+  tipo: "social"
   descripcion: "Detecta picos en menciones con sentimiento negativo"
   serie: "menciones"
   zscore: 2.0  # umbral de z-score para pico

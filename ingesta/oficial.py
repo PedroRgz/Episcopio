@@ -1,119 +1,208 @@
-"""Official data ingestion connectors."""
+"""Official data ingestion connectors.
+
+These connectors talk to public Mexican health-data sources. Two rules apply
+throughout:
+
+* A connector that cannot run reports ``skipped``/``error`` — it never returns
+  a fabricated success. The dashboard shows exactly which sources contributed.
+* Bulk-download URLs change often, so they are configurable via environment
+  variables rather than hard-coded and silently broken.
+"""
+from __future__ import annotations
+
+import logging
+import os
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
 import requests
-from datetime import datetime
-from typing import Dict, Any, List
+
+from ingesta.base import ConnectorResult
+from ingesta.providers import USER_AGENT
+
+logger = logging.getLogger(__name__)
+
+REQUEST_TIMEOUT = 30
+# Guard against a source handing us a multi-gigabyte file and exhausting RAM.
+MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
+
+# Bulk endpoints are deployment-specific; configure them to enable ingest.
+DGE_DATA_URL = os.getenv("EP_DGE_DATA_URL", "").strip()
+CONACYT_DATA_URL = os.getenv("EP_CONACYT_DATA_URL", "").strip()
+
+INEGI_POPULATION_INDICATOR = "1002000001"
 
 
-def fetch_dge():
-    """
-    Fetch data from DGE (Dirección General de Epidemiología).
-    
-    MVP: Placeholder function. Production: Implement actual API/scraping.
-    """
-    print(f"[{datetime.now()}] Conectando a DGE...")
-    
-    # TODO: Implement actual data fetching
-    # 1. Connect to DGE API or download CSV files
-    # 2. Parse and normalize data
-    # 3. Insert into database (serie_oficial table)
-    # 4. Log ingestion results
-    
-    print("[INFO] Datos DGE procesados exitosamente (mock)")
-    return {"status": "success", "filas_procesadas": 100, "filas_insertadas": 95}
+def _download_json(url: str, source: str) -> ConnectorResult:
+    """Stream a JSON document with a hard size ceiling."""
+    with requests.get(
+        url, timeout=REQUEST_TIMEOUT, headers={"User-Agent": USER_AGENT}, stream=True
+    ) as r:
+        if r.status_code != 200:
+            return ConnectorResult.unreachable(
+                source, f"La fuente respondió con estado {r.status_code}."
+            )
+
+        declared = r.headers.get("Content-Length")
+        if declared and declared.isdigit() and int(declared) > MAX_DOWNLOAD_BYTES:
+            return ConnectorResult.error(source, "El archivo excede el tamaño máximo permitido.")
+
+        payload = bytearray()
+        for chunk in r.iter_content(chunk_size=65536):
+            payload.extend(chunk)
+            if len(payload) > MAX_DOWNLOAD_BYTES:
+                return ConnectorResult.error(
+                    source, "El archivo excede el tamaño máximo permitido."
+                )
+
+    try:
+        import json
+
+        data = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return ConnectorResult.error(source, "La fuente no devolvió JSON válido.")
+
+    rows = data if isinstance(data, list) else data.get("data", [])
+    if not isinstance(rows, list):
+        rows = []
+    return ConnectorResult.success(
+        source, len(rows), f"{len(rows)} registros descargados.", rows
+    )
 
 
-def fetch_inegi():
+def fetch_dge(credentials: Optional[Dict[str, str]] = None) -> ConnectorResult:
+    """Fetch open data from the Dirección General de Epidemiología.
+
+    Set ``EP_DGE_DATA_URL`` to the JSON export you want ingested. Without it the
+    connector reports ``skipped`` rather than pretending to have run.
     """
-    Fetch demographic and socioeconomic indicators from INEGI API.
-    
-    MVP: Placeholder function. Production: Implement actual API calls.
-    """
-    print(f"[{datetime.now()}] Conectando a INEGI API...")
-    
-    # TODO: Implement actual INEGI API calls
-    # 1. Use INEGI API token from secrets
-    # 2. Fetch population and demographic indicators
-    # 3. Store in database for KPI calculations
-    # 4. Log ingestion results
-    
-    print("[INFO] Datos INEGI procesados exitosamente (mock)")
-    return {"status": "success", "indicadores_actualizados": 32}
+    source = "dge"
+    if not DGE_DATA_URL:
+        return ConnectorResult.skipped(
+            source,
+            "Configure EP_DGE_DATA_URL con el export de datos abiertos de la DGE.",
+        )
+    try:
+        return _download_json(DGE_DATA_URL, source)
+    except requests.Timeout:
+        return ConnectorResult.unreachable(source, "Tiempo de espera agotado.")
+    except requests.RequestException as exc:
+        logger.warning("Ingesta DGE falló: %s", type(exc).__name__)
+        return ConnectorResult.unreachable(source, "No fue posible contactar la fuente.")
 
 
-def fetch_conacyt_covid():
-    """
-    Fetch COVID-19 data from CONACYT dashboard.
-    
-    MVP: Placeholder function. Production: Implement actual data fetching.
-    """
-    print(f"[{datetime.now()}] Conectando a CONACYT COVID-19...")
-    
-    # TODO: Implement actual data fetching
-    # 1. Download JSON/CSV from CONACYT
-    # 2. Parse and normalize data
-    # 3. Insert into database
-    # 4. Log ingestion results
-    
-    print("[INFO] Datos CONACYT procesados exitosamente (mock)")
-    return {"status": "success", "filas_procesadas": 50}
+def fetch_conacyt_covid(credentials: Optional[Dict[str, str]] = None) -> ConnectorResult:
+    """Fetch COVID-19 data from the CONAHCYT open-data export."""
+    source = "conacyt"
+    if not CONACYT_DATA_URL:
+        return ConnectorResult.skipped(
+            source,
+            "Configure EP_CONACYT_DATA_URL con el export público de CONAHCYT.",
+        )
+    try:
+        return _download_json(CONACYT_DATA_URL, source)
+    except requests.Timeout:
+        return ConnectorResult.unreachable(source, "Tiempo de espera agotado.")
+    except requests.RequestException as exc:
+        logger.warning("Ingesta CONAHCYT falló: %s", type(exc).__name__)
+        return ConnectorResult.unreachable(source, "No fue posible contactar la fuente.")
 
 
-def fetch_datos_abiertos_ssa():
+def fetch_inegi(credentials: Optional[Dict[str, str]] = None) -> ConnectorResult:
+    """Fetch population indicators from INEGI, used for per-100k rates.
+
+    Args:
+        credentials: ``{"token": "..."}`` as supplied by the user.
     """
-    Fetch open data from SSA (Secretaría de Salud).
-    
-    MVP: Placeholder function. Production: Implement actual data download.
-    """
-    print(f"[{datetime.now()}] Descargando datos abiertos SSA...")
-    
-    # TODO: Implement actual data download
-    # 1. Download CSV/Excel files
-    # 2. Parse and normalize data
-    # 3. Insert into database
-    # 4. Log ingestion results
-    
-    print("[INFO] Datos SSA procesados exitosamente (mock)")
-    return {"status": "success", "archivos_procesados": 3}
+    source = "inegi"
+    token = (credentials or {}).get("token", "").strip()
+    if not token:
+        return ConnectorResult.skipped(source, "Sin token de INEGI; se omiten tasas por 100 mil.")
+
+    url = (
+        "https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/"
+        f"INDICATOR/{INEGI_POPULATION_INDICATOR}/es/0700/false/BISE/2.0/"
+        f"{requests.utils.quote(token, safe='')}"
+    )
+    try:
+        r = requests.get(
+            url,
+            params={"type": "json"},
+            timeout=REQUEST_TIMEOUT,
+            headers={"User-Agent": USER_AGENT},
+        )
+    except requests.Timeout:
+        return ConnectorResult.unreachable(source, "Tiempo de espera agotado.")
+    except requests.RequestException as exc:
+        logger.warning("Ingesta INEGI falló: %s", type(exc).__name__)
+        return ConnectorResult.unreachable(source, "No fue posible contactar la API de INEGI.")
+
+    if r.status_code in (401, 403):
+        return ConnectorResult.error(source, "Token de INEGI rechazado.")
+    if r.status_code != 200:
+        return ConnectorResult.unreachable(source, f"INEGI respondió con estado {r.status_code}.")
+
+    try:
+        payload = r.json()
+    except ValueError:
+        return ConnectorResult.error(source, "INEGI no devolvió JSON válido.")
+
+    series = payload.get("Series") or []
+    observations: List[Dict[str, Any]] = []
+    for serie in series:
+        for obs in serie.get("OBSERVATIONS") or []:
+            observations.append(
+                {
+                    "periodo": obs.get("TIME_PERIOD"),
+                    "valor": obs.get("OBS_VALUE"),
+                    "indicador": serie.get("INDICADOR", INEGI_POPULATION_INDICATOR),
+                }
+            )
+
+    return ConnectorResult.success(
+        source,
+        len(observations),
+        f"{len(observations)} observaciones demográficas obtenidas.",
+        observations,
+    )
+
+
+def fetch_datos_abiertos_ssa(credentials: Optional[Dict[str, str]] = None) -> ConnectorResult:
+    """Fetch SSA open data. Shares the DGE export configuration."""
+    source = "ssa"
+    if not DGE_DATA_URL:
+        return ConnectorResult.skipped(source, "Configure EP_DGE_DATA_URL para habilitar SSA.")
+    return fetch_dge(credentials)
 
 
 def verificar_fuentes() -> List[Dict[str, Any]]:
+    """Check reachability of the public official sources.
+
+    Uses ``HEAD`` so the check stays cheap, and reports the failure mode rather
+    than claiming every source is available.
     """
-    Verify availability of all official data sources.
-    
-    Returns:
-        List of source status dictionaries
-    """
-    fuentes = [
-        {
-            "nombre": "DGE",
-            "url": "https://www.gob.mx/salud/documentos/datos-abiertos-152127",
-            "estado": "disponible"
-        },
-        {
-            "nombre": "INEGI",
-            "url": "https://www.inegi.org.mx/servicios/api_indicadores.html",
-            "estado": "disponible"
-        },
-        {
-            "nombre": "CONACYT",
-            "url": "https://datos.covid-19.conacyt.mx",
-            "estado": "disponible"
-        }
+    checks = [
+        ("DGE", "https://www.gob.mx/salud/documentos/datos-abiertos-152127"),
+        ("INEGI", "https://www.inegi.org.mx/servicios/api_indicadores.html"),
+        ("CONAHCYT", "https://datos.covid-19.conacyt.mx"),
     ]
-    
-    # TODO: Implement actual health checks
+
+    fuentes = []
+    for nombre, url in checks:
+        estado = "no disponible"
+        try:
+            r = requests.head(
+                url, timeout=10, allow_redirects=True, headers={"User-Agent": USER_AGENT}
+            )
+            estado = "disponible" if r.status_code < 400 else f"error {r.status_code}"
+        except requests.RequestException:
+            estado = "inalcanzable"
+        fuentes.append(
+            {
+                "nombre": nombre,
+                "url": url,
+                "estado": estado,
+                "verificado_en": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+        )
     return fuentes
-
-
-if __name__ == "__main__":
-    # Test functions
-    print("=== Test de conectores oficiales ===")
-    fetch_dge()
-    fetch_inegi()
-    fetch_conacyt_covid()
-    fetch_datos_abiertos_ssa()
-    
-    print("\n=== Verificación de fuentes ===")
-    fuentes = verificar_fuentes()
-    for fuente in fuentes:
-        print(f"- {fuente['nombre']}: {fuente['estado']}")

@@ -1,16 +1,582 @@
-/* Episcopio Custom Styles - Modern, Responsive Design */
-* {
-    box-sizing: border-box;
+/* ==========================================================================
+   Episcopio — design system
+   Minimalist, high-contrast, light/dark aware. One accent colour, neutral
+   surfaces, hairline borders instead of heavy shadows.
+   ========================================================================== */
+
+:root {
+    /* Neutrals */
+    --bg: #fbfbfa;
+    --surface: #ffffff;
+    --surface-subtle: #f4f4f2;
+    --border: #e4e4e1;
+    --border-strong: #d2d2ce;
+
+    /* Text */
+    --text: #16181d;
+    --text-muted: #6b7280;
+    --text-faint: #9ca3af;
+
+    /* Accent + semantics */
+    --accent: #1f6feb;
+    --accent-hover: #1a5fd0;
+    --accent-soft: rgba(31, 111, 235, 0.09);
+    --positive: #0f7b52;
+    --positive-soft: rgba(15, 123, 82, 0.10);
+    --warning: #a45a00;
+    --warning-soft: rgba(164, 90, 0, 0.10);
+    --danger: #b4232b;
+    --danger-soft: rgba(180, 35, 43, 0.10);
+
+    /* Shape + motion */
+    --radius-sm: 6px;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow-sm: 0 1px 2px rgba(16, 18, 22, 0.04);
+    --shadow-md: 0 4px 16px rgba(16, 18, 22, 0.08);
+    --shadow-lg: 0 16px 48px rgba(16, 18, 22, 0.16);
+    --ease: cubic-bezier(0.2, 0, 0.2, 1);
+
+    /* Spacing scale */
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+    --s6: 32px;
+    --s7: 48px;
+
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+            "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+    --max-width: 1180px;
+    --header-height: 64px;
 }
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0d0f13;
+        --surface: #16181d;
+        --surface-subtle: #1c1f26;
+        --border: #272b33;
+        --border-strong: #363b45;
+
+        --text: #eceef2;
+        --text-muted: #9aa2b1;
+        --text-faint: #6b7280;
+
+        --accent: #5b9bff;
+        --accent-hover: #7cb0ff;
+        --accent-soft: rgba(91, 155, 255, 0.14);
+        --positive: #3fbf8f;
+        --positive-soft: rgba(63, 191, 143, 0.14);
+        --warning: #e0a153;
+        --warning-soft: rgba(224, 161, 83, 0.14);
+        --danger: #f2626c;
+        --danger-soft: rgba(242, 98, 108, 0.14);
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+        --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.65);
+    }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
     padding: 0;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
-._dash-loading {
-    display: none;
+h1, h2, h3, h4 {
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: -0.011em;
+    color: var(--text);
+}
+
+h1 { font-size: 20px; }
+h2 { font-size: 17px; }
+h3 { font-size: 15px; }
+
+p { margin: 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Dash injects a loading placeholder we don't want flashing on screen. */
+._dash-loading { display: none; }
+
+/* Give keyboard users an unmistakable focus ring everywhere. */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Layout
+   -------------------------------------------------------------------------- */
+
+.ep-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+.ep-main {
+    flex: 1;
+    width: 100%;
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: var(--s6) var(--s5) var(--s7);
+}
+
+.ep-section { margin-bottom: var(--s6); }
+
+.ep-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s3);
+    margin-bottom: var(--s4);
+}
+
+.ep-section-title { font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--text-muted); }
+
+/* --------------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------------- */
+
+.ep-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--border);
+}
+
+.ep-header-inner {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    min-height: var(--header-height);
+    padding: var(--s3) var(--s5);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+    flex-wrap: wrap;
+}
+
+.ep-brand { display: flex; align-items: center; gap: var(--s3); }
+
+.ep-mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.ep-brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+.ep-brand-name { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+.ep-brand-tagline { font-size: 12px; color: var(--text-muted); }
+
+.ep-header-actions { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+
+.ep-btn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    padding: 8px 14px;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 550;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 120ms var(--ease), border-color 120ms var(--ease),
+                transform 80ms var(--ease);
+    white-space: nowrap;
+}
+
+.ep-btn:hover { background: var(--surface-subtle); border-color: var(--text-faint); }
+.ep-btn:active { transform: translateY(1px); }
+
+.ep-btn--primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+.ep-btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.ep-btn--ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+.ep-btn--ghost:hover { background: var(--surface-subtle); color: var(--text); }
+
+.ep-btn--block { width: 100%; }
+
+.ep-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+/* --------------------------------------------------------------------------
+   Cards
+   -------------------------------------------------------------------------- */
+
+.ep-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--s5);
+    box-shadow: var(--shadow-sm);
+}
+
+.ep-card--flush { padding: 0; overflow: hidden; }
+
+.ep-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+    margin-bottom: var(--s4);
+}
+
+.ep-card-sub { font-size: 13px; color: var(--text-muted); }
+
+/* KPI cards */
+
+.ep-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--s4);
+}
+
+.ep-kpi { display: flex; flex-direction: column; gap: var(--s2); }
+
+.ep-kpi-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.ep-kpi-value {
+    font-size: 32px;
+    font-weight: 660;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.ep-kpi-delta { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 550; }
+.ep-kpi-delta--up { color: var(--danger); }
+.ep-kpi-delta--down { color: var(--positive); }
+.ep-kpi-delta--flat { color: var(--text-faint); }
+
+/* --------------------------------------------------------------------------
+   Filter bar
+   -------------------------------------------------------------------------- */
+
+.ep-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--s4);
+    align-items: end;
+}
+
+.ep-field { display: flex; flex-direction: column; gap: 6px; }
+
+.ep-label { font-size: 12.5px; font-weight: 550; color: var(--text-muted); }
+
+.ep-input {
+    width: 100%;
+    padding: 9px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+
+.ep-input::placeholder { color: var(--text-faint); }
+
+.ep-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ep-hint { font-size: 12px; color: var(--text-faint); }
+
+/* Dash Dropdown overrides so react-select matches the design system. */
+.ep-field .Select-control,
+.ep-field .is-focused .Select-control,
+.ep-field div[class*="control"] {
+    background: var(--surface) !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: var(--radius-sm) !important;
+    min-height: 38px !important;
+    box-shadow: none !important;
+    color: var(--text) !important;
+}
+
+.ep-field .Select-placeholder,
+.ep-field .Select-value-label,
+.ep-field div[class*="singleValue"],
+.ep-field div[class*="placeholder"] { color: var(--text) !important; }
+
+.ep-field div[class*="menu"] {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-sm) !important;
+    box-shadow: var(--shadow-md) !important;
+    z-index: 60;
+}
+
+.ep-field div[class*="option"] { background: transparent !important; color: var(--text) !important; }
+.ep-field div[class*="option"]:hover { background: var(--surface-subtle) !important; }
+
+/* --------------------------------------------------------------------------
+   Badges & status
+   -------------------------------------------------------------------------- */
+
+.ep-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 550;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.ep-badge--neutral { background: var(--surface-subtle); color: var(--text-muted); border-color: var(--border); }
+.ep-badge--live { background: var(--positive-soft); color: var(--positive); border-color: transparent; }
+.ep-badge--sample { background: var(--warning-soft); color: var(--warning); }
+.ep-badge--error { background: var(--danger-soft); color: var(--danger); }
+.ep-badge--running { background: var(--accent-soft); color: var(--accent); }
+
+.ep-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+.ep-dot--pulse { animation: ep-pulse 1.4s ease-in-out infinite; }
+
+@keyframes ep-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ep-dot--pulse { animation: none; }
+    * { transition-duration: 0.01ms !important; }
+}
+
+/* --------------------------------------------------------------------------
+   Source / step list
+   -------------------------------------------------------------------------- */
+
+.ep-list { display: flex; flex-direction: column; }
+
+.ep-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+    padding: var(--s3) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.ep-row:last-child { border-bottom: none; }
+
+.ep-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ep-row-title { font-size: 14px; font-weight: 550; }
+.ep-row-sub { font-size: 12.5px; color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* --------------------------------------------------------------------------
+   Alerts
+   -------------------------------------------------------------------------- */
+
+.ep-alert {
+    display: flex;
+    gap: var(--s3);
+    padding: var(--s4);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warning);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    margin-bottom: var(--s3);
+}
+
+.ep-alert:last-child { margin-bottom: 0; }
+.ep-alert--danger { border-left-color: var(--danger); }
+.ep-alert-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ep-alert-title { font-size: 14px; font-weight: 600; }
+.ep-alert-meta { font-size: 12.5px; color: var(--text-muted); }
+
+.ep-empty {
+    padding: var(--s5) var(--s4);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+/* The run panel starts empty; keep it from reserving a tall blank block. */
+#run-panel { padding: var(--s3) var(--s5); }
+
+/* --------------------------------------------------------------------------
+   Modal
+   -------------------------------------------------------------------------- */
+
+.ep-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(9, 11, 15, 0.55);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--s4);
+    z-index: 100;
+}
+
+.ep-modal {
+    width: 100%;
+    max-width: 640px;
+    max-height: 88vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: var(--s6);
+}
+
+.ep-modal-head { margin-bottom: var(--s5); }
+.ep-modal-title { font-size: 19px; font-weight: 650; letter-spacing: -0.015em; }
+.ep-modal-lede { margin-top: 6px; font-size: 13.5px; color: var(--text-muted); }
+
+.ep-modal-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--s2);
+    margin-top: var(--s5);
+    padding-top: var(--s4);
+    border-top: 1px solid var(--border);
+}
+
+/* Provider credential blocks inside the modal */
+
+.ep-provider {
+    padding: var(--s4) 0;
+    border-bottom: 1px solid var(--border);
+}
+.ep-provider:last-of-type { border-bottom: none; }
+
+.ep-provider-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+    margin-bottom: var(--s3);
+}
+
+.ep-provider-name { font-size: 14px; font-weight: 600; }
+.ep-provider-desc { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+
+.ep-provider-fields { display: flex; flex-direction: column; gap: var(--s3); }
+
+.ep-note {
+    display: flex;
+    gap: var(--s3);
+    padding: var(--s3) var(--s4);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.ep-note strong { color: var(--text); font-weight: 600; }
+
+/* --------------------------------------------------------------------------
+   Progress
+   -------------------------------------------------------------------------- */
+
+.ep-progress {
+    height: 3px;
+    width: 100%;
+    background: var(--surface-subtle);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.ep-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 300ms var(--ease);
+}
+
+/* --------------------------------------------------------------------------
+   Charts
+   -------------------------------------------------------------------------- */
+
+.ep-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: var(--s4);
+}
+
+.js-plotly-plot .plotly .modebar { opacity: 0.35; transition: opacity 150ms var(--ease); }
+.js-plotly-plot:hover .plotly .modebar { opacity: 1; }
+
+/* --------------------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------------------- */
+
+.ep-footer {
+    border-top: 1px solid var(--border);
+    padding: var(--s5);
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--text-faint);
+}
+
+.ep-footer-links { display: flex; gap: var(--s4); justify-content: center; margin-top: var(--s2); }
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+    .ep-main { padding: var(--s5) var(--s4) var(--s6); }
+    .ep-modal { padding: var(--s5); border-radius: var(--radius); }
+    .ep-kpi-value { font-size: 27px; }
+    .ep-header-inner { padding: var(--s3) var(--s4); }
+    .ep-brand-tagline { display: none; }
+    .ep-row { flex-direction: column; align-items: flex-start; gap: var(--s2); }
 }

@@ -1,27 +1,109 @@
 """ETL normalization functions."""
+from collections import defaultdict
 from datetime import datetime
 from typing import Dict, Any, List
+import logging
 import re
 
+logger = logging.getLogger(__name__)
 
-def normalizar_dge():
+
+def normalizar_dge(rows: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+    """Normalize raw official rows into Episcopio's canonical shape.
+
+    Args:
+        rows: Raw records as returned by an official connector. Records that
+            cannot be normalized (bad dates, deaths exceeding cases) are
+            dropped and counted rather than silently corrupting the series.
+
+    Returns:
+        ``{"filas_normalizadas": int, "filas_descartadas": int, "serie": [...]}``
+        where each series entry is ``{fecha, cve_ent, casos, defunciones, semana_iso}``.
     """
-    Normalize data from DGE source.
-    
-    MVP: Placeholder function. Production: Implement actual normalization.
+    rows = rows or []
+    serie: List[Dict[str, Any]] = []
+    descartadas = 0
+
+    for row in rows:
+        if not isinstance(row, dict):
+            descartadas += 1
+            continue
+
+        fecha = estandarizar_fecha(str(row.get("fecha") or row.get("FECHA") or ""))
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha):
+            descartadas += 1
+            continue
+
+        casos = _as_int(row.get("casos", row.get("CASOS")))
+        defunciones = _as_int(row.get("defunciones", row.get("DEFUNCIONES")))
+        if not validar_casos_defunciones(casos, defunciones):
+            descartadas += 1
+            continue
+
+        serie.append(
+            {
+                "fecha": fecha,
+                "cve_ent": normalizar_cve_ent(row.get("cve_ent", row.get("ENTIDAD_RES", "0"))),
+                "casos": casos,
+                "defunciones": defunciones,
+                "semana_iso": calcular_semana_iso(fecha),
+            }
+        )
+
+    serie.sort(key=lambda r: (r["fecha"], r["cve_ent"]))
+    return {
+        "filas_normalizadas": len(serie),
+        "filas_descartadas": descartadas,
+        "serie": serie,
+    }
+
+
+def _as_int(value: Any) -> int:
+    """Coerce a raw field to a non-negative int, defaulting to 0."""
+    try:
+        return max(0, int(float(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def normalizar_menciones(menciones: List[Dict[str, Any]] | None) -> Dict[str, Any]:
+    """Aggregate raw social mentions into a daily count/sentiment series.
+
+    Args:
+        menciones: Records shaped by the social connectors, each with
+            ``fecha``, ``texto``, ``fuente`` and ``sentimiento``.
+
+    Returns:
+        ``{"menciones": [{"fecha", "conteo", "sentimiento"}], "por_fuente": {...}}``
+        sorted by date, with sentiment averaged per day.
     """
-    print(f"[{datetime.now()}] Normalizando datos DGE...")
-    
-    # TODO: Implement actual normalization
-    # 1. Standardize date formats to ISO-8601
-    # 2. Map entity codes to INEGI standard (2 digits)
-    # 3. Map municipality codes to INEGI standard (5 digits)
-    # 4. Normalize morbidity names to catalog
-    # 5. Handle missing values and duplicates
-    # 6. Calculate ISO week numbers
-    
-    print("[INFO] Normalización DGE completada (mock)")
-    return {"status": "success", "filas_normalizadas": 95}
+    menciones = menciones or []
+    por_dia: Dict[str, List[float]] = defaultdict(list)
+    por_fuente: Dict[str, int] = defaultdict(int)
+
+    for m in menciones:
+        if not isinstance(m, dict):
+            continue
+        fecha = estandarizar_fecha(str(m.get("fecha", "")))
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha):
+            continue
+        try:
+            sentimiento = float(m.get("sentimiento", 0.0))
+        except (TypeError, ValueError):
+            sentimiento = 0.0
+        # Clamp so a malformed upstream value cannot skew the chart's axis.
+        por_dia[fecha].append(max(-1.0, min(1.0, sentimiento)))
+        por_fuente[str(m.get("fuente", "desconocida"))] += 1
+
+    serie = [
+        {
+            "fecha": fecha,
+            "conteo": len(valores),
+            "sentimiento": round(sum(valores) / len(valores), 3),
+        }
+        for fecha, valores in sorted(por_dia.items())
+    ]
+    return {"menciones": serie, "por_fuente": dict(por_fuente)}
 
 
 def estandarizar_fecha(fecha: str) -> str:
@@ -34,23 +116,28 @@ def estandarizar_fecha(fecha: str) -> str:
     Returns:
         Date in YYYY-MM-DD format
     """
-    # TODO: Implement robust date parsing
-    # Handle multiple date formats: DD/MM/YYYY, MM-DD-YYYY, etc.
-    
-    # Placeholder: return as-is if already ISO format
-    if re.match(r'\d{4}-\d{2}-\d{2}', fecha):
-        return fecha
-    
-    # Try to parse and convert
-    try:
-        # Try DD/MM/YYYY format
-        if '/' in fecha:
-            parts = fecha.split('/')
-            if len(parts) == 3:
-                return f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
-    except:
-        pass
-    
+    fecha = (fecha or "").strip()
+    if not fecha:
+        return ""
+
+    # Already ISO (possibly with a time component we can drop).
+    if re.match(r"\d{4}-\d{2}-\d{2}", fecha):
+        return fecha[:10]
+
+    # DD/MM/YYYY, the dominant format in Mexican official exports.
+    if "/" in fecha:
+        parts = fecha.split("/")
+        if len(parts) == 3 and all(p.isdigit() for p in parts):
+            dia, mes, anio = parts
+            if len(anio) == 4:
+                return f"{anio}-{mes.zfill(2)}-{dia.zfill(2)}"
+
+    for pattern in ("%d-%m-%Y", "%m-%d-%Y", "%Y/%m/%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(fecha, pattern).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+
     return fecha
 
 
@@ -140,9 +227,10 @@ def calcular_semana_iso(fecha: str) -> int:
         ISO week number (1-53)
     """
     try:
-        dt = datetime.fromisoformat(fecha)
-        return dt.isocalendar()[1]
-    except:
+        return datetime.fromisoformat(fecha).isocalendar()[1]
+    except (TypeError, ValueError):
+        # An unparseable date has no meaningful week; the caller filters these
+        # out before they reach the series.
         return 1
 
 

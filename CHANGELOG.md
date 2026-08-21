@@ -1,5 +1,72 @@
 # Changelog
 
+## [1.1.0] - 2026-08-21
+
+### Seguridad
+
+- **Fuga de credenciales entre usuarios (crítico).** El dashboard mantenía un
+  `EpiscopioAPIClient` global a nivel de módulo donde guardaba las llaves del
+  usuario. Como Dash atiende a todos los visitantes desde un mismo proceso, las
+  llaves de un visitante se aplicaban a las peticiones de todos los demás, y el
+  cambio a "datos reales" afectaba a todos. Sustituido por un vault del servidor
+  con aislamiento por sesión, TTL y capacidad acotada.
+- **Credenciales en el navegador.** Las llaves se guardaban en un `dcc.Store`, es
+  decir viajaban en claro al navegador y volvían en cada callback. Ahora el
+  navegador solo conserva un `session_id` aleatorio de 256 bits.
+- **CORS con credenciales.** `allow_origins` se construía sin validación y con
+  `allow_credentials=True` y `allow_methods=["*"]`. Ahora los métodos y
+  cabeceras son explícitos, y en producción se rechaza `*` y el HTTP plano.
+- **Secretos de ejemplo en producción.** `changeme` y `changeme_jwt_secret` se
+  aceptaban en silencio. Con `EP_ENVIRONMENT=production` la aplicación ya no
+  arranca con valores de plantilla ni con un secreto JWT corto.
+- Añadidas cabeceras de seguridad (CSP, `X-Frame-Options`, `nosniff`,
+  `Referrer-Policy`, `Permissions-Policy`, HSTS) y rate limiting por IP con
+  presupuesto más estricto para escrituras.
+- Validación estricta de entrada en el API (patrones de entidad y fecha,
+  `Literal` para niveles de actividad, límites de tamaño en credenciales).
+- `debug=True` ya no es el valor por defecto del dashboard; requiere `EP_DEBUG`
+  y escucha en loopback.
+- Documentación interactiva (`/docs`, `/openapi.json`) deshabilitada en producción.
+
+### Corregido
+
+- **Modo de datos reales completamente roto.** `EP_API_URL` valía `/api/v1` por
+  defecto y el cliente construía `f"{base_url}/api/v1/health"`, produciendo
+  `/api/v1/api/v1/health`: una URL relativa con prefijo duplicado que `requests`
+  ni siquiera puede enviar. Un `except` genérico convertía el fallo en una
+  gráfica vacía sin explicación. El cliente ahora detecta el despliegue unificado
+  y lee los servicios en proceso; `EP_API_URL` solo se usa si es absoluta.
+- **El rate limiter bloqueaba la propia UI.** Dash envía un POST a
+  `/_dash-update-component` en cada interacción, que se contabilizaba contra el
+  presupuesto de escritura del API. El limitador ahora solo mide `/api/v1`.
+- `analytics/alertas.py` cargaba las reglas con una ruta relativa que solo
+  funcionaba si el proceso se iniciaba desde la raíz del repositorio.
+- Eliminados los `except:` desnudos de `etl/normaliza.py`.
+- Sustituido `starlette.middleware.wsgi.WSGIMiddleware` (obsoleto y eliminado en
+  Starlette reciente) por `a2wsgi`.
+
+### Añadido
+
+- Flujo "conecta y ejecuta": al guardar las llaves se validan contra la API real
+  de cada plataforma y se lanza la ingesta automáticamente, con progreso por
+  fuente en vivo.
+- Registro de proveedores (`ingesta/providers.py`) con campos declarados y
+  validadores en vivo para INEGI, X/Twitter, Reddit, NewsAPI, Facebook e Instagram.
+- Conectores reales que reciben credenciales y reportan resultados honestos
+  (`ok`, `skipped`, `error`, `unreachable`) en lugar de éxitos simulados.
+- Pipeline (`orchestrator/pipeline.py`) que ejecuta en segundo plano, aísla el
+  fallo de cada fuente y publica el dataset de la sesión.
+- KPIs y reglas de alerta calculados de verdad sobre las series normalizadas.
+- Nueva UI minimalista con sistema de diseño propio, tema claro/oscuro
+  automático, diseño responsivo y estados vacíos que explican su causa.
+- Suite de pruebas (72 casos) sobre vault, proveedores, pipeline, analítica y
+  endurecimiento del API.
+
+### Eliminado
+
+- `dashboard/app_old_backup.py` y `dashboard/app_original.py` (copias muertas).
+
+
 All notable changes to the Episcopio project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
