@@ -1,4 +1,20 @@
-"""Configuration module for Episcopio."""
-from .loader import load_config, AppSettings, AlertSettings, Secrets
+"""Configuration package for Episcopio."""
+from .loader import (
+    load_config,
+    AppSettings,
+    AlertSettings,
+    ApiSettings,
+    SessionSettings,
+    Secrets,
+    ConfigurationError,
+)
 
-__all__ = ["load_config", "AppSettings", "AlertSettings", "Secrets"]
+__all__ = [
+    "load_config",
+    "AppSettings",
+    "AlertSettings",
+    "ApiSettings",
+    "SessionSettings",
+    "Secrets",
+    "ConfigurationError",
+]

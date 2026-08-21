@@ -1,9 +1,13 @@
 # Episcopio - Non-sensitive configuration
 app:
   name: "Episcopio"
-  version: "1.0.0-mvp"
+  version: "1.1.0"
   timezone: "America/Merida"
-  
+  # development | production. Override at runtime with EP_ENVIRONMENT.
+  # In production the loader refuses to boot with placeholder secrets or a
+  # wildcard CORS policy.
+  environment: "development"
+
 alerts:
   alert_windows_days: 14
   cooldown_hours: 24
@@ -15,7 +19,7 @@ alerts:
 analytics:
   moving_window_days: [7, 14, 28]
   correlation_window_days: 14
-  
+
 ingesta:
   batch_size: 1000
   retry_attempts: 3
@@ -25,8 +29,17 @@ api:
   title: "Episcopio API"
   description: "API de lectura para monitoreo epidemiológico"
   version: "1.0"
+  # Enforced by api.security.RateLimitMiddleware (per client IP).
   rate_limit_per_minute: 60
-  
+  # Tighter budget for state-changing endpoints (surveys, pipeline runs).
+  write_rate_limit_per_minute: 10
+
+session:
+  # How long a browser session's server-side credentials stay usable.
+  credential_ttl_minutes: 60
+  # Upper bound on concurrently tracked sessions (oldest are evicted first).
+  max_sessions: 500
+
 dashboard:
   refresh_interval_seconds: 300
   default_entity: "31"  # Yucatán

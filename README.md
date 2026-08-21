@@ -4,14 +4,34 @@
 
 Episcopio es una plataforma de monitoreo epidemiológico que integra datos oficiales (DGE/SINAVE, INEGI, CONACYT) con señales complementarias (sondeos clínicos y monitoreo de redes sociales) para ofrecer visualizaciones prácticas, alertas tempranas y boletines ejecutivos destinados a profesionales de la salud.
 
-## 🎯 Características del MVP
+## 🎯 Características
 
-- **Panel oficial**: KPIs (casos confirmados, activos, defunciones), series temporales y mapas por entidad
-- **Panel social**: Análisis de menciones en redes sociales con análisis de sentimiento básico
-- **Alertas**: Reglas simples para detectar incrementos súbitos y cambios de tendencia
-- **Dashboard interactivo**: Visualización en tiempo real con Dash/Plotly
-- **API REST**: Endpoints para consulta de datos epidemiológicos
-- **Arquitectura modular**: Fácil de extender y mantener
+- **Conecta y ejecuta**: ingresas tus llaves en el panel de fuentes y Episcopio valida cada credencial contra su API real y lanza la ingesta automáticamente. Sin scripts, sin reinicios.
+- **Credenciales del lado del servidor**: las llaves nunca se guardan en el navegador ni se devuelven en ninguna respuesta. Viven en memoria, ligadas a tu sesión, con expiración automática.
+- **Panel oficial**: KPIs (casos totales, activos, defunciones), series temporales y datos por entidad.
+- **Panel social**: menciones y sentimiento agregados por día a partir de las plataformas que conectes.
+- **Alertas**: reglas de incremento súbito y de pico social con sentimiento negativo, evaluadas sobre datos reales.
+- **Estado transparente**: cada fuente reporta su resultado (conectada, omitida, error) — nunca un éxito ficticio.
+- **UI minimalista**: diseño responsivo con soporte automático para tema claro y oscuro.
+
+### Cómo funciona el flujo de llaves
+
+```
+Navegador                 Servidor
+---------                 --------
+guarda solo un   ──────►  vault en memoria (por sesión, con TTL)
+session id                      │
+                                ▼
+                          valida cada credencial contra su API
+                                │
+                                ▼
+                          ingesta → normalización → KPIs → alertas
+                                │
+                                ▼
+                          dataset de la sesión → dashboard
+```
+
+Sin credenciales, el dashboard funciona con datos de muestra claramente etiquetados.
 
 ## 🏗️ Arquitectura
 
@@ -77,6 +97,8 @@ Para desplegar en producción usando Azure Web Apps o una VM de Azure, consulta 
 Las siguientes variables de entorno deben configurarse al desplegar en Azure:
 
 **Requeridas:**
+- `EP_ENVIRONMENT` - `production` en despliegues reales. Con este valor la aplicación **se niega a arrancar** si detecta secretos de ejemplo, CORS con `*` u orígenes en HTTP plano.
+- `EP_SECURITY_JWT_SECRET` - Secreto de firma, mínimo 32 caracteres
 - `EP_POSTGRES_HOST` - Host del servidor PostgreSQL
 - `EP_POSTGRES_USER` - Usuario de PostgreSQL
 - `EP_POSTGRES_PASSWORD` - Contraseña de PostgreSQL
@@ -84,9 +106,15 @@ Las siguientes variables de entorno deben configurarse al desplegar en Azure:
 - `EP_SECURITY_CORS_ALLOWED_ORIGINS` - Orígenes permitidos para CORS (separados por comas), ej: `https://episcopio.mx,https://www.episcopio.mx`
 
 **Opcionales:**
-- `EP_API_URL` - URL base para el API. Por defecto `/api/v1` (relativo) para el despliegue unificado. Usar URL completa solo si API y Dashboard están en hosts separados.
+- `EP_API_URL` - Solo para despliegues separados: URL **absoluta** del API (`https://api.ejemplo.mx`). En el despliegue unificado déjala sin definir; el dashboard lee los servicios en proceso.
 - `EP_REDIS_URL` - URL de Redis para caché
 - `EP_POSTGRES_PORT` - Puerto de PostgreSQL (default: 5432)
+- `EP_DGE_DATA_URL` / `EP_CONACYT_DATA_URL` - Exports JSON de datos abiertos a ingerir. Sin ellos esas fuentes se reportan como *omitidas*.
+- `EP_LOG_LEVEL` - Nivel de log (default: `INFO`)
+- `EP_INGEST_INTERVAL_HOURS` - Periodicidad del scheduler desatendido (default: 6)
+
+> El limitador de peticiones es por proceso. Con varios workers el presupuesto
+> efectivo es `límite × workers`; para un límite global compartido usa Redis.
 
 ## 📊 Uso
 
@@ -107,14 +135,26 @@ La API REST está disponible en http://localhost:8000/api/v1/
 Endpoints principales:
 
 - `GET /api/v1/health` - Verificar estado del servicio
-- `GET /api/v1/meta` - Metadatos de fuentes
+- `GET /api/v1/meta` - Catálogo de proveedores y sus campos de credencial
+- `GET /api/v1/sources/health` - Disponibilidad real de las fuentes públicas
+- `POST /api/v1/session` - Crear una sesión (devuelve el `session_id`)
+- `POST /api/v1/session/credentials` - Guardar credenciales de un proveedor
+- `POST /api/v1/session/credentials/validate` - Validar contra la API real
+- `DELETE /api/v1/session` - Borrar la sesión y todo su contenido
+- `POST /api/v1/pipeline/run` - Lanzar la ingesta
+- `GET /api/v1/pipeline/status` - Progreso de la ejecución
 - `POST /api/v1/kpi` - Obtener KPIs
 - `GET /api/v1/timeseries` - Serie temporal
 - `GET /api/v1/map/entidad` - Datos para mapa
 - `GET /api/v1/alerts` - Alertas activas
 - `POST /api/v1/survey` - Enviar sondeo clínico
 
-Documentación interactiva disponible en http://localhost:8000/docs
+Todos los endpoints con estado de sesión requieren la cabecera
+`X-Episcopio-Session: <session_id>`. Una sesión nunca puede leer los datos ni
+las credenciales de otra.
+
+Documentación interactiva en http://localhost:8000/docs (deshabilitada cuando
+`EP_ENVIRONMENT=production`).
 
 ## 🛠️ Desarrollo
 
@@ -170,12 +210,19 @@ python scheduler.py
 ### Ejecutar Tests
 
 ```bash
+# Suite completa
+pytest
+
 # Linting
-flake8 api/ dashboard/ analytics/ etl/ ingesta/
+flake8 --max-line-length=120 api core config dashboard ingesta etl analytics orchestrator
 
 # Validar configuración
 python -c "import yaml; yaml.safe_load(open('config/settings.yaml'))"
 ```
+
+La suite cubre el aislamiento entre sesiones del vault, el enmascarado de
+credenciales, la validación de proveedores, el pipeline completo (incluida la
+degradación cuando una fuente falla) y el endurecimiento del API.
 
 ## 📁 Estructura de Datos
 
@@ -218,6 +265,27 @@ Las credenciales se gestionan mediante:
 
 1. **Archivo YAML** (desarrollo): `config/secrets.local.yaml`
 2. **Variables de entorno** (producción): Prefijo `EP_`
+3. **Panel de fuentes** (por sesión): almacenadas solo en memoria del servidor
+
+## 🔐 Modelo de seguridad
+
+- **Aislamiento por sesión.** Las credenciales viven en un vault del servidor
+  indexado por un identificador aleatorio de 256 bits. Ninguna sesión puede leer
+  las llaves ni los datos de otra.
+- **El navegador no guarda llaves.** Solo conserva el `session_id`. El API nunca
+  devuelve una credencial: las respuestas van enmascaradas.
+- **Expiración automática.** El vault tiene TTL deslizante y capacidad máxima; un
+  reinicio borra todo. Configurable en `config/settings.yaml` (`session:`).
+- **Arranque seguro en producción.** Con `EP_ENVIRONMENT=production` la
+  aplicación falla al arrancar si hay secretos de ejemplo, CORS con `*` o
+  orígenes en HTTP plano.
+- **Cabeceras de seguridad** en toda respuesta: CSP, `X-Frame-Options: DENY`,
+  `nosniff`, `Referrer-Policy`, `Permissions-Policy` y HSTS en producción.
+- **Rate limiting** por IP, con presupuesto más estricto para escrituras.
+- **Validación estricta** de entrada en todos los endpoints (claves de entidad,
+  fechas, tamaños de credencial).
+- **Sin fugas en logs.** Las credenciales viajan en cabeceras, nunca en query
+  strings, y ningún mensaje de error incluye su valor.
 
 Las variables de entorno tienen prioridad sobre el archivo YAML.
 
