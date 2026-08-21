@@ -34,7 +34,13 @@ jobs:
       - name: Run Python linting (flake8)
         run: |
           pip install flake8
-          flake8 api/ dashboard/ analytics/ etl/ ingesta/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+          flake8 api/ core/ config/ dashboard/ analytics/ etl/ ingesta/ orchestrator/ \
+            --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run tests
+        run: |
+          pip install pytest 'httpx<0.28'
+          pytest -q
       
       - name: Validate configuration files
         run: |
